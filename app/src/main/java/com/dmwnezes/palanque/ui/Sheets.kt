@@ -445,9 +445,25 @@ fun CarreiraSheet(c: GameController) {
             }
         } else {
             Spacer(Modifier.height(6.dp))
+            CampaignTimeline(c)
+            if (g.campaignPromises.isNotEmpty()) {
+                SectionTitle("Promessas de campanha")
+                for (p in g.campaignPromises) {
+                    val now = g.ind[p.area.ordinal]
+                    LineItem("${p.area.label} +5", if (p.done) (if (now >= p.base + 5) "cumprida" else "quebrada") else "${now.toInt()} / ${(p.base + 5).toInt()}",
+                        if (now >= p.base + 5) Ink.good else if (p.done) Ink.coral else Ink.amber, sub = "prazo: ${Fmt.date(sim.dateOf(p.due))}")
+                }
+            }
             if (e == null) {
-                Note("A campanha começa em 16 de agosto de ${sim.termEndYear}. Até lá, governe bem: a aprovação de cada bairro vira voto.")
+                Note("A convenção é em 20 de julho de ${sim.termEndYear}. Até lá, governe bem: a aprovação de cada bairro vira voto.")
                 return@Tabbed
+            }
+            e.vice?.let { v ->
+                SectionTitle("Chapa")
+                LineItem("Vice", v.name, sub = sim.partyOf(v.party).sigla)
+                LineItem("Coligação", if (e.partners.isEmpty()) "só o ${sim.party.sigla}" else e.partners.joinToString(" · ") { sim.partyOf(it).sigla })
+                LineItem("Tempo de TV", Fmt.pct(e.tv), sub = "a propaganda rende mais com mais tempo")
+                if (Elections.incoherence(sim, e) > 0) Note("Partidos distantes na coligação tiram ${Fmt.signed(-Elections.incoherence(sim, e))} pontos.", Ink.amber)
             }
             val pl = e.candidates.indexOfFirst { it.player }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

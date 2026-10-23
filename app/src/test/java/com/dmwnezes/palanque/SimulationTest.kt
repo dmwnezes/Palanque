@@ -77,6 +77,8 @@ class SimulationTest {
                 while (g.events.isNotEmpty()) Events.resolve(s, 0)
                 g.election?.let { e ->
                     e.seen = true
+                    if (!e.conventionDone) Elections.confirmConvention(s, 0, Elections.coalitionOptions(s).filter { it.second }.take(2).map { it.first.id })
+                    while (e.debate > 0) Elections.answerDebate(s, 0)
                     if (!e.finished && e.fund > Elections.adCost(s)) Elections.advertise(s)
                 }
                 if (day % 60 == 0 && g.cash > s.budget().revenue * 0.15) {
@@ -114,6 +116,28 @@ class SimulationTest {
         assertEquals(null, C.send(s, "escola_integral", revoke = true))
         repeat(31) { s.advanceDay(); g.events.clear() }
         assertTrue(g.bills.last().status != "tramitando")
+    }
+
+    @Test fun campaign() {
+        val s = TestBr.newSim()
+        val g = s.game
+        while (g.election == null) { s.advanceDay(); g.events.clear() }
+        val e = g.election!!
+        assertEquals(0, e.phase)
+        assertEquals(3, e.viceOptions.size)
+        val ok = Elections.coalitionOptions(s).filter { it.second }.take(2).map { it.first.id }
+        val fund0 = e.fund
+        Elections.confirmConvention(s, 1, ok)
+        assertTrue(e.conventionDone && e.fund > fund0 && e.tv in 0.05..0.8)
+        assertNotNull("comício antes da campanha", Elections.rally(s, 0))
+        var debates = 0
+        while (!e.finished) {
+            s.advanceDay(); g.events.clear()
+            if (e.debate > 0) { debates++; while (e.debate > 0) Elections.answerDebate(s, 1) }
+        }
+        assertTrue("debates $debates", debates >= 2)
+        assertTrue(e.polls.size >= 6 && e.pollBairro.size == g.bairros.size)
+        assertTrue("promessas", g.campaignPromises.isNotEmpty())
     }
 
     @Test fun randomEventsOff() {

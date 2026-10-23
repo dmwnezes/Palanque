@@ -107,14 +107,29 @@ class ScreensRenderTest {
         rule.runOnIdle {
             sim.game.events.clear()
             while (sim.game.election == null) { sim.advanceDay(); sim.game.events.clear() }
-            repeat(30) { sim.advanceDay(); sim.game.events.clear() }
+            c.refresh()
+        }
+        shot("41_convencao")
+        rule.runOnIdle {
+            Elections.confirmConvention(sim, 0, Elections.coalitionOptions(sim).filter { it.second }.take(2).map { it.first.id })
+            while (sim.game.election?.debate == 0) { sim.advanceDay(); sim.game.events.clear() }
+            c.refresh()
+        }
+        shot("44_debate")
+        rule.runOnIdle {
+            while (sim.game.election!!.debate > 0) Elections.answerDebate(sim, 1)
             Elections.rally(sim, 0); Elections.advertise(sim)
             c.tab = Tab.CARREIRA; c.subTab[Tab.CARREIRA] = 1; c.refresh()
         }
-        shot("41_campanha")
+        shot("45_campanha")
+        rule.runOnIdle { c.tab = null; c.layer = Layer.VOTOS; c.refresh() }
+        shot("46_intencao")
         rule.runOnIdle {
             c.tab = null
-            while (sim.game.election?.let { it.round >= 1 } != true) { sim.advanceDay(); sim.game.events.clear() }
+            while (sim.game.election?.let { it.round >= 1 } != true) {
+                sim.advanceDay(); sim.game.events.clear()
+                sim.game.election?.let { e -> while (e.debate > 0) Elections.answerDebate(sim, 0) }
+            }
             c.refresh()
         }
         shot("42_resultado")

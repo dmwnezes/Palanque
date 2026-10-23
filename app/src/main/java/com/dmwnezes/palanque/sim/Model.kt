@@ -18,6 +18,9 @@ enum class Area(val label: String, val short: String, val ref: Double, val weigh
     AMBIENTE("Meio ambiente", "Ambiente", 50.0, 0.06),
     TURISMO("Turismo", "Turismo", 35.0, 0.04);
 
+    /** "a saúde" / "o transporte" */
+    val the get() = (if (this in listOf(TRANSPORTE, SANEAMENTO, AMBIENTE, TURISMO)) "o " else "a ") + label.lowercase()
+
     companion object { val REF_TOTAL = entries.sumOf { it.ref } }
 }
 
@@ -200,7 +203,32 @@ class Election(
     var boost: Double = 0.0,
     /** índice do adversário no 2º turno */
     var rival2: Int = -1,
+    /** 0 = pré-campanha (convenção), 1 = campanha nas ruas */
+    var phase: Int = 1,
+    var conventionDone: Boolean = true,
+    val viceOptions: MutableList<Vice> = mutableListOf(),
+    var vice: Vice? = null,
+    /** partidos coligados com você */
+    val partners: MutableList<String> = mutableListOf(),
+    /** fatia do horário eleitoral na TV (0..1) */
+    var tv: Double = 0.2,
+    /** debate em andamento: número (1, 2 ou 3 = 2º turno), pergunta atual e pontos */
+    var debate: Int = 0,
+    var debateStep: Int = 0,
+    var debateScore: Double = 0.0,
+    val debateAreas: MutableList<Area> = mutableListOf(),
+    val debatesDone: MutableList<Int> = mutableListOf(),
+    /** intenção de voto em você por bairro, da última pesquisa */
+    var pollBairro: List<Double> = emptyList(),
 )
+
+/** Candidato a vice: partido, bairro onde é conhecido e fama (1 a 5). */
+@Serializable
+class Vice(val name: String, val party: String, val bairro: Int, val fame: Int)
+
+/** Promessa de campanha: subir uma área em 5 pontos até o prazo. */
+@Serializable
+class CampaignPromise(val area: Area, val base: Double, val due: Int, var done: Boolean = false)
 
 @Serializable
 class GameOver(val kind: String, val title: String, val text: String)
@@ -265,4 +293,5 @@ class Game(
     val customLaws: MutableList<CustomLaw> = mutableListOf(),
     /** cargos comissionados dados a vereadores */
     var cargos: Int = 0,
+    val campaignPromises: MutableList<CampaignPromise> = mutableListOf(),
 )

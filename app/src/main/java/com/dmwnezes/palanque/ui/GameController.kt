@@ -57,11 +57,13 @@ class GameController(val sim: Sim, private val store: SaveStore, private val sco
     private val dayLength = doubleArrayOf(1.0, 0.45, 0.2, 0.08)
 
     val electionPending get() = game.election?.let { it.round >= 1 && !it.seen } == true
-    val blocked get() = game.events.isNotEmpty() || game.gameOver != null || electionPending
+    /** convenção a fechar ou debate no ar */
+    val campaignPending get() = game.election?.let { !it.conventionDone || it.debate > 0 } == true
+    val blocked get() = game.events.isNotEmpty() || game.gameOver != null || electionPending || campaignPending
 
     fun onFrame(dtSec: Double, nowMs: Long) {
         if (toasts.isNotEmpty()) toasts.removeAll { nowMs - it.born > 3800 }
-        val ev = game.events.isNotEmpty() || electionPending
+        val ev = game.events.isNotEmpty() || electionPending || campaignPending
         if (ev && !hadEvent) feedback?.play(if (electionPending) Sfx.VOTE else Sfx.EVENT)
         hadEvent = ev
         if (paused || blocked || saving) { acc = 0.0; return }

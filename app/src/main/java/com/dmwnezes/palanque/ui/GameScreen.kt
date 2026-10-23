@@ -105,7 +105,9 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
             Layer.VOTOS -> {
                 val e = g.election
                 val res = e?.result?.getOrNull(i)
-                if (res == null) BairroPaint(Ink.land, null) else {
+                val intent = e?.pollBairro?.getOrNull(i)
+                if (res == null && intent != null) BairroPaint(Ink.heat((intent * 200).toFloat()).copy(alpha = 0.8f), Fmt.pct(intent))
+                else if (res == null) BairroPaint(Ink.land, null) else {
                     val pl = e.candidates.indexOfFirst { it.player }
                     val mine = res[pl]
                     val best = res.filterIndexed { k, _ -> k != pl }.max()
@@ -167,6 +169,10 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
 
         g.events.firstOrNull()?.let { EventCard(c) }
         if (g.events.isEmpty() && c.electionPending) ElectionCard(c)
+        g.election?.let { e ->
+            if (g.events.isEmpty() && !e.conventionDone) ConventionCard(c)
+            else if (g.events.isEmpty() && e.debate > 0) DebateCard(c)
+        }
 
         g.gameOver?.let { go ->
             Overlay({}, dismissable = false) {
@@ -271,7 +277,7 @@ private fun LayerButton(c: GameController) {
         if (open) {
             Column(Modifier.clip(Shapes.card).background(Ink.panel).padding(6.dp)) {
                 for (m in Layer.entries) {
-                    if (m == Layer.VOTOS && c.game.election?.result.isNullOrEmpty()) continue
+                    if (m == Layer.VOTOS && c.game.election?.let { it.result.isNotEmpty() || it.pollBairro.isNotEmpty() } != true) continue
                     val sel = m == c.layer
                     Text(
                         m.label, style = Type.label, color = if (sel) Ink.onGold else Ink.text,

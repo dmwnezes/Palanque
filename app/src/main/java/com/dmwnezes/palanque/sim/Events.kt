@@ -237,6 +237,21 @@ object Events {
             ),
         ),
         EventDef(
+            "ataque", "camera", null,
+            title = { _, e -> "${e.text} ataca você na TV" },
+            text = { _, e -> "A propaganda do adversário mostra ${e.area?.the} da cidade como prova de que você fracassou." },
+            weight = { 0.0 },
+            options = listOf(
+                EventOption("Responder com números", { s, _ -> listOf(money(Elections.adCost(s) * 0.5)) }) { s, _ ->
+                    s.game.election?.let { it.fund = (it.fund - Elections.adCost(s) * 0.5).coerceAtLeast(0.0) }
+                },
+                EventOption("Processar por fake news", { _, _ -> listOf(Chip("Pode virar a seu favor… ou não", false)) }) { s, _ ->
+                    s.game.election?.let { it.boost += if (s.rng(321).nextBoolean()) 1.0 else -1.0 }
+                },
+                EventOption("Ignorar", { _, _ -> listOf(Chip("Campanha −1,5", false)) }) { s, _ -> s.game.election?.let { it.boost -= 1.5 } },
+            ),
+        ),
+        EventDef(
             "cpi", "gavel", null,
             title = { _, _ -> "Oposição abre CPI contra a prefeitura" },
             text = { _, _ -> "A maioria da Câmara quer investigar os contratos do seu governo." },

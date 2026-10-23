@@ -2,7 +2,7 @@
 
 Simulador político para Android: comece numa cidade real do Brasil e suba, mandato a mandato, da Câmara Municipal ao Palácio do Planalto. Orçamento com os pisos de saúde e educação e a Lei de Responsabilidade Fiscal, obras no mapa, secretários, crises, campanha e urna — em tempo real com pausa.
 
-**Versão 0.2:** prefeito jogável em qualquer um dos 5.570 municípios, com Câmara Municipal, leis e negociação de votos.
+**Versão 0.3:** prefeito jogável em qualquer um dos 5.570 municípios, com Câmara Municipal, leis, negociação de votos e campanha completa.
 
 ## Baixar
 
@@ -16,7 +16,7 @@ A cada envio para `main`, o GitHub Actions roda os testes, gera o APK e publica 
 - **Equipe:** um secretário por área — competência, honestidade e lealdade.
 - **Câmara:** vereadores com partido, reduto e relação com você. Envie leis prontas ou criadas por você, negocie (conversa, emenda, cargo, obra prometida) e cuide da maioria: oposição forte abre CPI e, com o governo impopular, vota a cassação.
 - **Menu de pausa:** liga e desliga os eventos aleatórios a qualquer momento.
-- **Carreira:** em agosto de 2032 começa a campanha: pesquisas semanais, comícios, propaganda e segundo turno nas cidades com mais de 200 mil eleitores.
+- **Campanha:** convenção em 20 de julho (vice e coligação, que dão verba e tempo de TV), campanha nas ruas a partir de 16 de agosto com comícios e propaganda, dois debates na TV, ataques dos adversários, pesquisas semanais com mapa de intenção de voto por bairro e segundo turno nas cidades com mais de 200 mil eleitores. Promessas feitas nos debates são cobradas dois anos depois.
 
 ## Como o projeto está organizado
 
