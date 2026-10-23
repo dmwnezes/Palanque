@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.dmwnezes.palanque.data.SaveStore
@@ -157,6 +158,20 @@ class ScreensRenderTest {
             rule.runOnIdle { c.select(-1); c.tab = t; c.subTab[t] = k; c.refresh() }
             shot("6${2 + listOf(Tab.GOVERNO to 0, Tab.GOVERNO to 1, Tab.OBRAS to 0, Tab.CAMARA to 0).indexOf(t to k)}_${t.name.lowercase()}$k")
         }
+    }
+
+    /** Mudar um imposto com a aba aberta atualiza os números na hora (sem fechar e reabrir). */
+    @Test fun sheetUpdatesInPlace() {
+        val sim = TestBr.newSim()
+        val c = GameController(sim, store(), MainScope())
+        rule.mainClock.autoAdvance = false
+        rule.setContent { PalanqueTheme { GameScreen(c, store(), {}, {}) } }
+        rule.runOnIdle { c.tab = Tab.GOVERNO; c.subTab[Tab.GOVERNO] = 1; c.refresh() }
+        rule.mainClock.advanceTimeBy(1000)
+        rule.runOnIdle { sim.setIptu(1.5); c.refresh() }
+        rule.mainClock.advanceTimeBy(1000)
+        val want = com.dmwnezes.palanque.sim.Fmt.money(sim.budget().iptu)
+        rule.onAllNodesWithText(want).fetchSemanticsNodes().let { org.junit.Assert.assertTrue("não achou $want", it.isNotEmpty()) }
     }
 
     /** Presidente: mapa do Brasil, orçamento da União, Congresso, mídia e bastidores. */

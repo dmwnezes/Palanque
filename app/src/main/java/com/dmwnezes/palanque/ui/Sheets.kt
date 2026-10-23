@@ -83,6 +83,8 @@ private fun LimitRow(label: String, value: Double, ok: Boolean, rule: String, wa
 
 @Composable
 fun GovernoSheet(c: GameController) {
+    // lê o relógio da tela: sem isso os números calculados aqui só mudam ao reabrir a aba
+    @Suppress("UNUSED_EXPRESSION") c.tick
     val sim = c.sim
     val g = c.game
     Tabbed(c, Tab.GOVERNO, "Governo", sim.governmentName, listOf("Orçamento", "Impostos", "Dívida")) { sel ->
@@ -169,6 +171,8 @@ fun GovernoSheet(c: GameController) {
 
 @Composable
 fun ObrasSheet(c: GameController) {
+    // lê o relógio da tela: sem isso os números calculados aqui só mudam ao reabrir a aba
+    @Suppress("UNUSED_EXPRESSION") c.tick
     val sim = c.sim
     val g = c.game
     Tabbed(c, Tab.OBRAS, "Obras", "${sim.activeObras} de ${sim.maxObras} em andamento", listOf("Catálogo", "Andamento", "Prontas")) { sel ->
@@ -288,6 +292,8 @@ private fun SecretarioLine(c: GameController, s: Secretario) {
 
 @Composable
 fun EquipeSheet(c: GameController) {
+    // lê o relógio da tela: sem isso os números calculados aqui só mudam ao reabrir a aba
+    @Suppress("UNUSED_EXPRESSION") c.tick
     val sim = c.sim
     val g = c.game
     var open by remember { mutableStateOf<Area?>(g.secretarios.indexOfFirst { it == null }.takeIf { it >= 0 }?.let { Area.entries[it] }) }
@@ -330,6 +336,8 @@ fun EquipeSheet(c: GameController) {
 
 @Composable
 fun CidadeSheet(c: GameController) {
+    // lê o relógio da tela: sem isso os números calculados aqui só mudam ao reabrir a aba
+    @Suppress("UNUSED_EXPRESSION") c.tick
     val sim = c.sim
     val g = c.game
     val city = sim.place
@@ -408,6 +416,8 @@ fun CidadeSheet(c: GameController) {
 
 @Composable
 fun CarreiraSheet(c: GameController) {
+    // lê o relógio da tela: sem isso os números calculados aqui só mudam ao reabrir a aba
+    @Suppress("UNUSED_EXPRESSION") c.tick
     val sim = c.sim
     val g = c.game
     val e = g.election

@@ -145,6 +145,8 @@ private fun VereadorRow(c: GameController, v: Vereador, billKey: Int, expanded: 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CamaraSheet(c: GameController) {
+    // lê o relógio da tela: sem isso os números calculados aqui só mudam ao reabrir a aba
+    @Suppress("UNUSED_EXPRESSION") c.tick
     val s = c.sim
     val g = c.game
     var open by remember { mutableIntStateOf(-1) }

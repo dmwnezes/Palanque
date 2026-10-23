@@ -45,6 +45,8 @@ import com.dmwnezes.palanque.sim.Role
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EmendasSheet(c: GameController) {
+    // lê o relógio da tela: sem isso os números calculados aqui só mudam ao reabrir a aba
+    @Suppress("UNUSED_EXPRESSION") c.tick
     val s = c.sim
     val g = c.game
     var area by remember { mutableStateOf(g.bairros.getOrNull(c.emendaTarget)?.need ?: Area.SAUDE) }
@@ -99,6 +101,8 @@ fun EmendasSheet(c: GameController) {
 /** Atuação no mandato: posição diante do governo, tribuna, CPI, relação com partido e governo. */
 @Composable
 fun MandatoSheet(c: GameController) {
+    // lê o relógio da tela: sem isso os números calculados aqui só mudam ao reabrir a aba
+    @Suppress("UNUSED_EXPRESSION") c.tick
     val s = c.sim
     val g = c.game
     Tabbed(c, Tab.MANDATO, "Mandato", "${g.role.label} · ${s.party.sigla}", listOf("Atuação")) { _ ->
