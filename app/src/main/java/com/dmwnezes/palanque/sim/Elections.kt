@@ -4,78 +4,143 @@ import java.time.LocalDate
 import kotlin.math.exp
 
 /**
- * Eleição municipal, no calendário real:
- * convenção em 20 de julho (vice e coligação), campanha nas ruas a partir de 16 de agosto,
- * debates na TV em setembro, 1º turno no primeiro domingo de outubro e 2º turno no último,
- * nas cidades com mais de 200 mil eleitores. Pesquisa toda semana.
+ * Eleições no calendário real. Anos múltiplos de 4 (2032, 2036…) são municipais: vereador e prefeito.
+ * Os outros anos pares (2030, 2034…) são gerais: deputados e governador.
+ * Em 20 de julho você escolhe o que disputar (convenção); a campanha nas ruas começa em 16 de agosto,
+ * os debates (só para cargos executivos) são em setembro, o 1º turno no primeiro domingo de outubro
+ * e o 2º turno no último, onde a lei exige. Pesquisa toda semana.
  */
 object Elections {
     private const val RUNOFF_VOTERS = 200_000
 
-    fun conventionDay(s: Sim) = s.dayOf(LocalDate.of(s.termEndYear, 7, 20))
-    fun campaignStart(s: Sim) = s.dayOf(LocalDate.of(s.termEndYear, 8, 16))
-    fun debateDays(s: Sim) = listOf(s.dayOf(LocalDate.of(s.termEndYear, 9, 3)), s.dayOf(LocalDate.of(s.termEndYear, 9, 24)), s.dayOf(LocalDate.of(s.termEndYear, 10, 20)))
+    /** Ano da eleição em andamento, ou da próxima. */
+    fun year(s: Sim): Int {
+        s.game.election?.let { return s.dateOf(it.day).year }
+        val d = s.date
+        return if (d.year % 2 == 0 && d.monthValue <= 10) d.year else d.year + if (d.year % 2 == 0) 2 else 1
+    }
+
+    fun isMunicipal(year: Int) = year % 4 == 0
+
+    fun conventionDay(s: Sim, y: Int = year(s)) = s.dayOf(LocalDate.of(y, 7, 20))
+    fun campaignStart(s: Sim, y: Int = year(s)) = s.dayOf(LocalDate.of(y, 8, 16))
+    fun debateDays(s: Sim, y: Int = year(s)) = listOf(s.dayOf(LocalDate.of(y, 9, 3)), s.dayOf(LocalDate.of(y, 9, 24)), s.dayOf(LocalDate.of(y, 10, 20)))
+    fun firstRoundDay(s: Sim, y: Int = year(s)) = s.dayOf(s.firstSunday(y, 10))
 
     fun tick(s: Sim) {
         val g = s.game
         val d = s.date
-        // eleições gerais no meio do mandato: só um aviso por enquanto
-        if (d.year % 4 == 2 && d.monthValue == 8 && d.dayOfMonth == 1 && g.events.none { it.key == "eleicao_geral" })
-            g.events += PendingEvent("eleicao_geral", g.day)
         checkPromises(s)
 
-        if (g.day == conventionDay(s)) start(s)
+        if (d.year % 2 == 0 && g.election == null) {
+            if (g.day == conventionDay(s, d.year) && g.running == null) openCandidacy(s)
+            // candidatura feita (ou vinda de outra jurisdição): a convenção começa
+            if (g.running != null && !g.candidacyPending && g.day >= conventionDay(s, d.year) && g.day < firstRoundDay(s, d.year)) start(s)
+        }
         val e = g.election ?: run {
-            // fim de mandato sem disputa (reeleição já usada ou inelegível)
-            if (d.monthValue == 12 && d.dayOfMonth == 31 && d.year == s.termEndYear && g.gameOver == null) endOfTerm(s)
+            // fim de mandato sem eleição ganha
+            if (d.monthValue == 12 && d.dayOfMonth == 31 && g.inOffice && d.year == s.termEndYear) termEnds(s)
             return
         }
+        val y = s.dateOf(e.day).year
         if (e.finished) {
-            if (d.monthValue == 12 && d.dayOfMonth == 31 && d.year == s.termEndYear) newTermOrEnd(s)
+            if (d.monthValue == 12 && d.dayOfMonth == 31 && d.year == y) settle(s, e)
             return
         }
-        if (g.day == campaignStart(s)) {
+        if (g.day == campaignStart(s, y)) {
             e.phase = 1
-            s.news("vote", "Começa a campanha nas ruas: ${e.candidates.size - 1} adversários disputam a prefeitura", 2)
+            s.news("vote", if (e.proportional) "Começa a campanha para ${e.office.label.lowercase()}" else "Começa a campanha nas ruas: ${e.candidates.size - 1} adversários na disputa", 2)
         }
-        if (e.phase == 1 && g.day < e.runoffDay && (g.day - campaignStart(s)) % 7 == 0) {
+        if (e.phase == 1 && g.day < e.runoffDay && (g.day - campaignStart(s, y)) % 7 == 0) {
             e.polls += poll(s, e)
-            momentum(s, e)
-            if (g.settings.randomEvents && g.events.isEmpty() && s.rng(616).nextDouble() < 0.2) attack(s, e)
+            if (!e.proportional) {
+                momentum(s, e)
+                if (g.settings.randomEvents && g.events.isEmpty() && s.rng(616).nextDouble() < 0.2) attack(s, e)
+            }
         }
-        val dd = debateDays(s)
-        if (g.day == dd[0]) startDebate(s, e, 1)
-        if (g.day == dd[1]) startDebate(s, e, 2)
-        if (g.day == dd[2] && e.round == 1 && e.rival2 >= 0) startDebate(s, e, 3)
+        if (!e.proportional) {
+            val dd = debateDays(s, y)
+            if (g.day == dd[0]) startDebate(s, e, 1)
+            if (g.day == dd[1]) startDebate(s, e, 2)
+            if (g.day == dd[2] && e.round == 1 && e.rival2 >= 0) startDebate(s, e, 3)
+        }
         if (g.day == e.day) firstRound(s, e)
         if (g.day == e.runoffDay && e.round == 1) runoff(s, e)
     }
 
+    // ───────────── candidatura ─────────────
+
+    /** Cargos que você pode disputar na eleição do ano. */
+    fun options(s: Sim, y: Int = year(s)): List<Role> {
+        val g = s.game
+        if (g.career.ineligibleUntil >= y) return emptyList()
+        val all = if (isMunicipal(y)) listOf(Role.VEREADOR, Role.PREFEITO) else listOf(Role.DEP_ESTADUAL, Role.DEP_FEDERAL, Role.GOVERNADOR)
+        // executivo: no máximo dois mandatos seguidos no mesmo cargo
+        return all.filter { r -> !(r.executive && g.inOffice && g.role == r && g.termNumber >= 2) }
+    }
+
+    private fun openCandidacy(s: Sim) {
+        val g = s.game
+        if (options(s).isEmpty()) {
+            if (g.career.ineligibleUntil >= year(s)) s.news("gavel", "Inelegível até ${g.career.ineligibleUntil}: você não disputa esta eleição", 3)
+            return
+        }
+        g.candidacyPending = true
+        s.news("vote", "Ano de eleição ${if (isMunicipal(year(s))) "municipal" else "geral"}: escolha o que disputar", 2)
+    }
+
+    /** Disputar um cargo (ou nenhum, com null). Em outro nível você deixa o mandato atual. */
+    fun declare(s: Sim, role: Role?) {
+        val g = s.game
+        g.candidacyPending = false
+        if (role == null) {
+            s.news("vote", "Você decide não disputar a eleição deste ano", 0)
+            return
+        }
+        if (role.level != g.level) {
+            if (g.inOffice) {
+                g.career.history += CareerEntry(g.role, s.place.name, g.termStart, g.day, g.approval)
+                s.news("flag", "Você deixa o cargo de ${g.role.label.lowercase()} para disputar ${role.label.lowercase()}", 2)
+            }
+            s.switchTo = Setup.newGame(
+                s.br, g.settings, g.career.homeCity, g.player, g.parties, role = role, career = g.career,
+                day = g.day, inOffice = false, running = role, feed = g.feed.take(12),
+            ).also { it.career.capital = g.career.capital }
+            return
+        }
+        g.running = role
+        start(s)
+    }
+
     private fun start(s: Sim) {
         val g = s.game
-        when {
-            g.rejected >= 2 -> {
-                s.news("gavel", "Contas rejeitadas duas vezes: você está inelegível e não disputa a eleição", 3)
-                return
-            }
-            g.termNumber >= 2 -> {
-                s.news("vote", "Seu segundo mandato termina este ano: a lei não permite uma terceira eleição seguida", 2)
-                return
-            }
+        val office = g.running ?: return
+        val y = s.date.year
+        val day = firstRoundDay(s, y)
+        val runoffDay = s.dayOf(s.lastSunday(y, 10))
+        if (!office.executive) {
+            val fund = (s.eleitores * 0.12 * (0.6 + g.partyRel / 250)).coerceAtLeast(30_000.0)
+            g.election = Election(day, runoffDay, mutableListOf(Candidate(g.player.name, g.player.party, 0.0, player = true)),
+                fund = fund, phase = 0, conventionDone = true, office = office, proportional = true)
+            s.news("vote", "Candidatura a ${office.label.lowercase()} registrada pelo ${s.party.sigla}", 1)
+            return
         }
         val r = s.rng(4242)
-        val parties = g.parties.filter { it.id != g.player.party && !it.custom }.sortedByDescending { it.size * (0.6 + r.nextDouble()) }
+        val parties = g.parties.filter { it.id != g.player.party && !it.custom }.sortedByDescending { it.size * (0.6 + r.nextDouble()) }.toMutableList()
         val n = if (s.eleitores > RUNOFF_VOTERS) 4 else 2 + r.nextInt(2)
+        val incumbent = g.inOffice && g.role == office
         // oposição mais forte contra um governo fraco
-        val opp = 49 + (50 - g.approval) * 0.3
+        val opp = if (incumbent) 47 + (50 - g.approval) * 0.35 else 46.0
         val cands = mutableListOf(Candidate(g.player.name, g.player.party, 0.0, player = true))
-        for (i in 0 until n) cands += Candidate(Content.personName(r), parties[i].id, opp - i * 5 + (r.nextDouble() - 0.5) * 8)
-        val e = Election(
-            s.dayOf(s.firstSunday(s.termEndYear, 10)), s.dayOf(s.lastSunday(s.termEndYear, 10)), cands,
-            fund = s.eleitores * 1.2, phase = 0, conventionDone = false,
-        )
+        // quem governa (ou o partido dele) defende o cargo quando não é você
+        if (!incumbent && g.execParty.isNotEmpty() && g.execParty != g.player.party) {
+            cands += Candidate(if (s.rng(77).nextBoolean()) g.execName else Content.personName(r), g.execParty, 44 + (g.execApproval - 50) * 0.5)
+            parties.removeAll { it.id == g.execParty }
+        }
+        while (cands.size < n + 1) cands += Candidate(Content.personName(r), parties[cands.size - 1].id, opp - (cands.size - 1) * 5 + (r.nextDouble() - 0.5) * 8)
+        val e = Election(day, runoffDay, cands, fund = s.eleitores * 1.2, phase = 0, conventionDone = false, office = office)
         // três nomes para vice: do seu partido e de aliados próximos
-        val near = coalitionOptions(s).filter { it.second }.map { it.first }
+        val near = coalitionOptions(s, e).filter { it.second }.map { it.first }
         val viceParties = (listOf(s.party) + near).distinct().take(4)
         repeat(3) { i ->
             val p = viceParties[(i + r.nextInt(viceParties.size)) % viceParties.size]
@@ -86,10 +151,10 @@ object Elections {
     }
 
     /** Partidos que aceitam (true) ou recusam (false) se coligar com você. */
-    fun coalitionOptions(s: Sim): List<Pair<Party, Boolean>> {
+    fun coalitionOptions(s: Sim, e: Election? = s.game.election): List<Pair<Party, Boolean>> {
         val g = s.game
         val me = s.party
-        val rivals = g.election?.candidates?.filter { !it.player }?.map { it.party }.orEmpty()
+        val rivals = e?.candidates?.filter { !it.player }?.map { it.party }.orEmpty()
         return g.parties.filter { it.id != me.id && !it.custom && it.id !in rivals }.map { p ->
             val dist = Camara.ideoDistance(p.econ, p.social, me.econ, me.social)
             val rel = g.camara.filter { it.party == p.id }.map { it.relation }.average().takeIf { !it.isNaN() } ?: 0.0
@@ -122,7 +187,7 @@ object Elections {
         val p = s.partyOf(it); Camara.ideoDistance(p.econ, p.social, s.party.econ, s.party.social) > 0.5
     } * 0.8
 
-    /** Força do candidato num bairro. */
+    /** Força do candidato numa região. */
     private fun score(s: Sim, e: Election, i: Int, b: Int, noise: Double): Double {
         val c = e.candidates[i]
         if (!c.player) return c.strength + noise
@@ -130,7 +195,7 @@ object Elections {
         return s.game.bairros[b].approval + s.game.bairros[b].rallies * 2.5 + e.boost * (0.6 + e.tv * 1.2) + vice - incoherence(s, e)
     }
 
-    /** Votos por bairro (frações que somam 1), só entre os candidatos indicados. */
+    /** Votos por região (frações que somam 1), só entre os candidatos indicados. */
     private fun shares(s: Sim, e: Election, among: List<Int>, salt: Int): List<List<Double>> {
         val r = s.rng(salt)
         return s.game.bairros.indices.map { b ->
@@ -144,7 +209,31 @@ object Elections {
         s.game.bairros.indices.sumOf { b -> byBairro[b][i] * s.game.bairros[b].popShare }
     }
 
+    // ───────────── eleição proporcional ─────────────
+
+    /** Fatia dos votos válidos em cada região e o total: (por região, seus votos, quociente eleitoral). */
+    fun proportional(s: Sim, e: Election, noise: Double = 0.0): Triple<List<Double>, Double, Double> {
+        val g = s.game
+        val seats = Camara.constituencySeats(e.office, g).coerceAtLeast(1)
+        val valid = s.eleitores * 0.8 * 0.92
+        val quotient = valid / seats
+        val by = g.bairros.indices.map { b ->
+            val sc = (g.bairros[b].approval + g.bairros[b].rallies * 2.5 + e.boost * (0.6 + e.tv)).coerceIn(0.0, 100.0)
+            (sc / 100) * (sc / 100) * 3.0 / seats * (1 + noise)
+        }
+        val votes = g.bairros.indices.sumOf { valid * g.bairros[it].popShare * by[it] }
+        return Triple(by, votes, quotient)
+    }
+
+    /** Eleito com 70% do quociente, ou com 40% se o partido for grande (votos da legenda). */
+    fun elected(s: Sim, votes: Double, quotient: Double) = votes >= 0.7 * quotient || (votes >= 0.4 * quotient && s.party.size >= 0.5)
+
     fun poll(s: Sim, e: Election): List<Double> {
+        if (e.proportional) {
+            val (by, v, q) = proportional(s, e, (s.rng(31 + e.polls.size).nextDouble() - 0.5) * 0.1)
+            e.pollBairro = by
+            return listOf(v / q)
+        }
         val among = if (e.round == 1 && e.rival2 >= 0) listOf(e.candidates.indexOfFirst { it.player }, e.rival2) else e.candidates.indices.toList()
         val by = shares(s, e, among, 900 + e.polls.size)
         val pl = e.candidates.indexOfFirst { it.player }
@@ -200,7 +289,7 @@ object Elections {
             0 -> ((g.ind[a.ordinal] - 50) / 5).coerceIn(-4.0, 4.0)
             1 -> {
                 if (g.campaignPromises.none { it.area == a && !it.done })
-                    g.campaignPromises += CampaignPromise(a, g.ind[a.ordinal], s.dayOf(LocalDate.of(s.termEndYear + 2, 12, 31)))
+                    g.campaignPromises += CampaignPromise(a, g.ind[a.ordinal], s.dayOf(LocalDate.of(s.dateOf(e.day).year + 2, 12, 31)))
                 1.5
             }
             2 -> if (r.nextDouble() < 0.55) 3.0 else -3.0
@@ -220,11 +309,12 @@ object Elections {
         }
     }
 
-    /** Promessas de campanha vencem dois anos depois da eleição. */
+    /** Promessas de campanha vencem dois anos depois da eleição; só valem se você governar. */
     private fun checkPromises(s: Sim) {
         val g = s.game
         for (p in g.campaignPromises) if (!p.done && g.day >= p.due) {
             p.done = true
+            if (!s.governs) continue
             val kept = g.ind[p.area.ordinal] >= p.base + 5
             s.shift(-1, if (kept) 3.0 else -4.0)
             s.news(if (kept) "check" else "broken", if (kept) "Promessa de campanha cumprida: ${p.area.label.lowercase()}" else "Promessa de campanha quebrada: ${p.area.label.lowercase()}", if (kept) 1 else 3)
@@ -234,6 +324,14 @@ object Elections {
     // ───────────── urna ─────────────
 
     private fun firstRound(s: Sim, e: Election) {
+        if (e.proportional) {
+            val (by, v, q) = proportional(s, e)
+            e.result = by.map { listOf(it) }
+            e.totals = listOf(v, q)
+            e.round = 1
+            finish(s, e, elected(s, v, q))
+            return
+        }
         if (!e.conventionDone) confirmConvention(s, 0, emptyList())
         val by = shares(s, e, e.candidates.indices.toList(), 1000)
         val t = totals(s, by)
@@ -246,7 +344,7 @@ object Elections {
             if (pl !in order.take(2)) finish(s, e, false)
             else {
                 e.rival2 = order.take(2).first { it != pl }
-                e.candidates[e.rival2].strength += 4 // a oposição se une no 2º turno
+                e.candidates[e.rival2].strength += 2 // a oposição se une no 2º turno
                 e.seen = false
                 s.news("vote", "Segundo turno contra ${e.candidates[e.rival2].name}", 2)
             }
@@ -264,10 +362,13 @@ object Elections {
 
     private fun finish(s: Sim, e: Election, won: Boolean) {
         e.finished = true; e.won = won; e.seen = false; e.debate = 0
-        s.news(if (won) "trophy" else "defeat", if (won) "Reeleito! Mais quatro anos à frente da prefeitura" else "Derrota nas urnas", if (won) 1 else 3)
+        val again = s.game.inOffice && s.game.role == e.office
+        s.news(if (won) "trophy" else "defeat",
+            if (won) (if (again) "Reeleito ${e.office.label.lowercase()}!" else "Eleito ${e.office.label.lowercase()}!") else "Derrota na eleição para ${e.office.label.lowercase()}",
+            if (won) 1 else 3)
     }
 
-    /** Ação de campanha: comício num bairro (até 2 por bairro). */
+    /** Ação de campanha: comício numa região (até 2 por região). */
     fun rally(s: Sim, b: Int): String? {
         val e = s.game.election ?: return "Não há campanha agora"
         if (e.finished) return "A campanha acabou"
@@ -281,8 +382,8 @@ object Elections {
         return null
     }
 
-    fun rallyCost(s: Sim) = s.eleitores * 0.12
-    fun adCost(s: Sim) = s.eleitores * 0.35
+    fun rallyCost(s: Sim) = s.eleitores * (if (s.game.election?.proportional == true) 0.02 else 0.12) * (if (s.level == Level.ESTADO) 0.1 else 1.0)
+    fun adCost(s: Sim) = s.eleitores * (if (s.game.election?.proportional == true) 0.04 else 0.35)
 
     /** Propaganda na TV e nas redes: até 4 inserções; rende mais com mais tempo de TV. */
     fun advertise(s: Sim): String? {
@@ -295,28 +396,96 @@ object Elections {
         return null
     }
 
-    private fun newTermOrEnd(s: Sim) {
+    // ───────────── posse, fim de mandato e fora do cargo ─────────────
+
+    /** 31 de dezembro do ano da eleição: quem venceu toma posse no dia seguinte. */
+    private fun settle(s: Sim, e: Election) {
         val g = s.game
-        val e = g.election ?: return
-        if (e.won) {
-            g.termNumber++
-            g.termStart = g.day + 1
-            g.election = null
+        val y = s.date.year
+        if (e.won) takeOffice(s, e) else {
+            g.election = null; g.running = null
             g.bairros.forEach { it.rallies = 0 }
-            // a nova Câmara acompanha a sua votação; os coligados viram base
-            val pl = e.candidates.indexOfFirst { it.player }
-            Camara.elect(s, e.totals.getOrElse(pl) { 0.3 } * 0.45)
-            g.camara.filter { it.party in e.partners }.forEach { it.favor += 15; it.relation += 15 }
-            s.news("flag", "Posse do segundo mandato e da nova Câmara", 1)
-        } else {
-            g.gameOver = GameOver("derrota", "Fim do mandato",
-                "Você entrega a prefeitura em 1º de janeiro. Em breve dará para recomeçar num cargo menor — vereador ou secretário.")
+            if (!g.inOffice || s.termEndYear <= y) termEnds(s)
         }
+        // a IA também troca de governo quando o cargo dela vai às urnas
+        if (!s.governs && g.inOffice && isMunicipal(y) == g.role.governor.municipal && s.rng(31337).nextBoolean()) newExec(s)
     }
 
-    private fun endOfTerm(s: Sim) {
+    private fun takeOffice(s: Sim, e: Election) {
         val g = s.game
-        g.gameOver = if (g.rejected >= 2) GameOver("inelegivel", "Inelegível", "Com as contas rejeitadas, você deixa a prefeitura sem poder disputar eleições por 8 anos.")
-        else GameOver("fim", "Missão cumprida", "Oito anos à frente de ${s.city.name}. Disputar deputado, governador e presidente chega nas próximas versões.")
+        val office = e.office
+        if (g.inOffice) g.career.history += CareerEntry(g.role, s.place.name, g.termStart, g.day, g.approval)
+        val again = g.inOffice && g.role == office
+        val wasExec = s.governs
+        g.termNumber = if (again) g.termNumber + 1 else 1
+        g.role = office; g.inOffice = true; g.running = null; g.election = null
+        g.termStart = g.day + 1
+        g.bairros.forEach { it.rallies = 0 }
+        g.bills.filter { it.status == "tramitando" }.forEach { it.status = "retirado" }
+        val pl = e.candidates.indexOfFirst { it.player }
+        val share = if (e.proportional) 0.15 else e.totals.getOrElse(pl) { 0.3 } * 0.45
+        if (office.executive) {
+            if (!again) {
+                g.secretarios.indices.forEach { g.secretarios[it] = null }
+                Setup.refreshPool(s)
+                g.cargos = 0
+                g.execApproval = g.approval
+            }
+            Camara.elect(s, share)
+            g.camara.filter { it.party in e.partners }.forEach { it.favor += 15; it.relation += 15 }
+        } else {
+            if (wasExec) newExec(s)
+            g.stance = if (g.execParty == g.player.party) 1 else 0
+            Camara.elect(s, share)
+            g.emendasLeft = Legislativo.emendaBudget(s)
+        }
+        s.news("flag", if (again) "Posse do ${g.termNumber}º mandato de ${office.label.lowercase()}" else "Posse como ${office.label.lowercase()}", 1)
+    }
+
+    /** Novo governo da IA (prefeito, governador ou presidente). */
+    private fun newExec(s: Sim) {
+        val g = s.game
+        val r = s.rng(9090)
+        g.execParty = g.parties.filter { !it.custom && it.id != g.player.party }.maxBy { it.size * r.nextDouble() }.id
+        g.execName = Content.personName(r)
+        g.execApproval = 55.0
+        g.execRel = 0.0
+        if (g.stance == 1) g.stance = 0
+    }
+
+    /** O mandato acabou sem um novo cargo. */
+    private fun termEnds(s: Sim) {
+        val g = s.game
+        if (g.inOffice) {
+            g.career.history += CareerEntry(g.role, s.place.name, g.termStart, g.day, g.approval)
+            s.news("flag", "Fim do mandato de ${g.role.label.lowercase()}", 0)
+        }
+        g.inOffice = false
+        g.election = null; g.running = null
+        g.gapPending = true
+    }
+
+    /** Fora do cargo: pular até a convenção de um ano de eleição. */
+    fun nextElections(s: Sim): List<Int> {
+        val y = s.date.year
+        val first = if (y % 2 == 0 && s.date.monthValue < 7) y else (y + 1) + ((y + 1) % 2)
+        return listOf(first, first + 2)
+    }
+
+    fun waitUntil(s: Sim, year: Int) {
+        val g = s.game
+        g.gapPending = false
+        g.day = s.dayOf(LocalDate.of(year, 7, 19))
+        g.events.clear()
+        g.history.clear()
+        s.news("vote", "${Fmt.date(s.date)}: a eleição de $year se aproxima", 0)
+    }
+
+    fun retire(s: Sim) {
+        val g = s.game
+        g.gapPending = false
+        val h = g.career.history
+        g.gameOver = GameOver("fim", "Fim da carreira",
+            if (h.isEmpty()) "Você deixa a política." else "Você deixa a política depois de ${h.size} mandato${if (h.size > 1) "s" else ""}: ${h.joinToString(", ") { it.role.label.lowercase() }}.")
     }
 }

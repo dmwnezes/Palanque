@@ -15,7 +15,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-enum class Tab(val label: String) { GOVERNO("Governo"), OBRAS("Obras"), CAMARA("Câmara"), EQUIPE("Equipe"), CIDADE("Cidade"), CARREIRA("Carreira") }
+enum class Tab(val label: String) {
+    GOVERNO("Governo"), OBRAS("Obras"), CAMARA("Câmara"), EMENDAS("Emendas"), MANDATO("Mandato"), EQUIPE("Equipe"), CIDADE("Cidade"), CARREIRA("Carreira")
+}
 
 enum class Layer(val label: String) { APROVACAO("Aprovação"), POPULACAO("População"), OBRAS("Obras"), VOTOS("Votos") }
 
@@ -59,7 +61,31 @@ class GameController(val sim: Sim, private val store: SaveStore, private val sco
     val electionPending get() = game.election?.let { it.round >= 1 && !it.seen } == true
     /** convenção a fechar ou debate no ar */
     val campaignPending get() = game.election?.let { !it.conventionDone || it.debate > 0 } == true
-    val blocked get() = game.events.isNotEmpty() || game.gameOver != null || electionPending || campaignPending
+    val blocked get() = game.events.isNotEmpty() || game.gameOver != null || electionPending || campaignPending ||
+        game.candidacyPending || game.gapPending || sim.switchTo != null
+
+    /** Abas do cargo: quem governa, quem legisla, quem está sem mandato. */
+    val tabs: List<Tab> get() = when {
+        sim.governs -> listOf(Tab.GOVERNO, Tab.OBRAS, Tab.CAMARA, Tab.EQUIPE, Tab.CIDADE, Tab.CARREIRA)
+        sim.legislates -> listOf(Tab.CAMARA, Tab.EMENDAS, Tab.MANDATO, Tab.CIDADE, Tab.CARREIRA)
+        else -> listOf(Tab.CIDADE, Tab.CARREIRA)
+    }
+
+    /** Nome curto da casa legislativa para a aba. */
+    val houseShort get() = when {
+        game.role == com.dmwnezes.palanque.sim.Role.DEP_FEDERAL -> "Câmara"
+        sim.level == com.dmwnezes.palanque.sim.Level.ESTADO -> "Assembleia"
+        else -> "Câmara"
+    }
+
+    fun tabLabel(t: Tab) = when (t) {
+        Tab.CAMARA -> houseShort
+        Tab.CIDADE -> if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) "Cidade" else "Estado"
+        else -> t.label
+    }
+
+    /** bairro/município escolhido antes de abrir as emendas ("Emenda aqui") */
+    var emendaTarget by mutableIntStateOf(-1)
 
     fun onFrame(dtSec: Double, nowMs: Long) {
         if (toasts.isNotEmpty()) toasts.removeAll { nowMs - it.born > 3800 }
@@ -123,7 +149,7 @@ class GameController(val sim: Sim, private val store: SaveStore, private val sco
     @Volatile var saving = false
         private set
 
-    private fun meta() = SaveMeta("", sim.city.name, game.day, 0, game.role.label, game.player.name)
+    private fun meta() = SaveMeta("", sim.place.name, game.day, 0, if (game.inOffice) game.role.label else "Candidato", game.player.name)
 
     /** Grava em segundo plano; o relógio espera terminar para não haver mudanças no meio. */
     fun save(slot: String) {

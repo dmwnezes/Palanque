@@ -124,21 +124,23 @@ fun CityMapView(
     val sim = c.sim
     val plan = sim.plan
     val camera = c.camera
-    val proj = remember(sim.city.code) { Projection.around(sim.city) }
-    val bairroPaths = remember(sim.city.code) { plan.bairros.map { ringsPath(it.rings) } }
-    val outline = remember(sim.city.code) { ringsPath(plan.outline) }
-    val neighbors = remember(sim.city.code) {
-        val c0 = sim.city
-        val padLon = (c0.lonMax - c0.lonMin) * 0.8f; val padLat = (c0.latMax - c0.latMin) * 0.8f
-        sim.br.cities.filter {
-            it.code != c0.code && it.lonMax > c0.lonMin - padLon && it.lonMin < c0.lonMax + padLon &&
-                it.latMax > c0.latMin - padLat && it.latMin < c0.latMax + padLat
+    val place = sim.place
+    val proj = remember(place.code, sim.level) { Projection.around(place) }
+    val bairroPaths = remember(place.code, sim.level) { plan.bairros.map { ringsPath(it.rings) } }
+    val outline = remember(place.code, sim.level) { ringsPath(plan.outline) }
+    val neighbors = remember(place.code, sim.level) {
+        val padLon = (place.lonMax - place.lonMin) * 0.8f; val padLat = (place.latMax - place.latMin) * 0.8f
+        // na cidade, os municípios vizinhos; no estado, os estados vizinhos
+        val pool = if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) sim.br.cities else sim.br.states
+        pool.filter {
+            it.code != place.code && it.lonMax > place.lonMin - padLon && it.lonMin < place.lonMax + padLon &&
+                it.latMax > place.latMin - padLat && it.latMin < place.latMax + padLat
         }.map { r ->
             val rings = r.rings.map { proj.ring(it) }
             Triple(r.name, ringsPath(rings), Geo.centroid(rings.maxBy { abs(Geo.area(it)) }))
         }
     }
-    val icons = Content.OBRAS.map { it.icon }.distinct().associateWith { rememberVectorPainter(GameIcons.of(it)) }
+    val icons = (Content.OBRAS + Content.OBRAS_ESTADO).map { it.icon }.distinct().associateWith { rememberVectorPainter(GameIcons.of(it)) }
     val label = rememberLabelPaint(12f)
     val small = rememberLabelPaint(10.5f, bold = false)
     val density = LocalDensity.current
@@ -146,13 +148,13 @@ fun CityMapView(
 
     Canvas(
         modifier
-            .pointerInput(sim.city.code) {
+            .pointerInput(place.code, sim.level) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
                     if (zoom != 1f) camera.zoomAt(centroid, zoom)
                     camera.pan(pan)
                 }
             }
-            .pointerInput(sim.city.code) {
+            .pointerInput(place.code, sim.level) {
                 detectTapGestures { o ->
                     val w = camera.toWorld(o)
                     onTap(plan.bairroAt(w.x, w.y))

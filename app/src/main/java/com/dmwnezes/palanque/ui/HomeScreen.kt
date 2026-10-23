@@ -62,7 +62,7 @@ fun HomeScreen(br: Brasil, store: SaveStore, onNew: () -> Unit, onLoad: (String)
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text("Continuar", style = Type.heading, color = Ink.onGold)
-                        Text("${latest.role} de ${latest.city} · ${latest.dateLabel()}", style = Type.label, color = Ink.onGold.copy(alpha = 0.75f))
+                        Text("${latest.role} · ${latest.city} · ${latest.dateLabel()}", style = Type.label, color = Ink.onGold.copy(alpha = 0.75f))
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -85,7 +85,7 @@ fun HomeScreen(br: Brasil, store: SaveStore, onNew: () -> Unit, onLoad: (String)
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(if (slot == "auto") "Automático" else "Espaço $slot", style = Type.label, color = Ink.muted)
-                        Text("${m.role} de ${m.city}", style = Type.body, color = Ink.text)
+                        Text("${m.role} · ${m.city}", style = Type.body, color = Ink.text)
                     }
                     Text(m.dateLabel(), style = Type.label, color = Ink.gold)
                 }

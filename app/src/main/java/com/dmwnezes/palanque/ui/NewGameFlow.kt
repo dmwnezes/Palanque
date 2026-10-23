@@ -69,7 +69,7 @@ private fun Field(value: String, placeholder: String, modifier: Modifier = Modif
 /** Novo jogo em cinco passos: você, cargo, estado, cidade e opções. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politician, List<Party>) -> Unit) {
+fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politician, List<Party>, Role) -> Unit) {
     var step by remember { mutableIntStateOf(0) }
     var name by remember { mutableStateOf("") }
     val parties = remember { Content.PARTIES.toMutableList() }
@@ -81,8 +81,9 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
     val crises = remember { Crisis.entries.toMutableSet() }
     var crisisTick by remember { mutableIntStateOf(0) }
     var randomEvents by remember { mutableStateOf(true) }
+    var role by remember { mutableStateOf(Role.PREFEITO) }
 
-    val titles = listOf("Quem é você", "Por onde começar", "Escolha o estado", "Escolha a cidade", "Últimos ajustes")
+    val titles = listOf("Quem é você", "Por onde começar", "Escolha o estado", "Sua cidade", "Últimos ajustes")
     val canNext = when (step) {
         0 -> name.isNotBlank()
         3 -> city >= 0
@@ -147,10 +148,10 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
                 }
                 1 -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (r in Role.entries) {
-                        val sel = r == Role.PREFEITO
+                        val sel = r == role
                         Row(
                             Modifier.fillMaxWidth().clip(Shapes.tile).background(if (sel) Ink.gold.copy(alpha = 0.16f) else Ink.raised)
-                                .let { if (sel) it.border(1.5.dp, Ink.gold, Shapes.tile) else it }.padding(16.dp),
+                                .let { if (sel) it.border(1.5.dp, Ink.gold, Shapes.tile) else it }.clickable(enabled = r.playable) { role = r }.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(if (r.playable) Icons.Rounded.CheckCircle else Icons.Rounded.Lock, null, tint = if (sel) Ink.gold else Ink.faint, modifier = Modifier.size(22.dp))
@@ -162,7 +163,8 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
                             if (!r.playable) Text("em breve", style = Type.small, color = Ink.faint)
                         }
                     }
-                    Text("Nesta versão você começa como prefeito. Os outros cargos chegam nas próximas.", style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 6.dp))
+                    Text("Cargos municipais começam em 2029; estaduais e federais, em 2031. A cada eleição você escolhe o próximo degrau. Senador e presidente chegam nas próximas versões.",
+                        style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 6.dp))
                 }
                 2 -> Column {
                     RegionPicker(br.states, Modifier.fillMaxWidth().weight(1f), selected = uf, labels = true) { uf = it; city = -1; query = "" }
@@ -222,7 +224,9 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
                     Panel(Modifier.fillMaxWidth()) {
                         Column {
                             Text("${name.trim()} · ${parties.first { it.id == party }.sigla}", style = Type.heading, color = Ink.text)
-                            Text("Prefeito de ${c.name} (${c.sigla}) · posse em 1º de janeiro de 2029", style = Type.label, color = Ink.muted)
+                            Text(if (role.level == com.dmwnezes.palanque.sim.Level.CIDADE) "${role.label} de ${c.name} (${c.sigla}) · posse em 1º de janeiro de 2029"
+                                else "${role.label} ${Fmt.ofState(c.uf, br.state(c.uf).name)} · posse em 1º de janeiro de 2031 · cidade natal: ${c.name}",
+                                style = Type.label, color = Ink.muted)
                         }
                     }
                     Spacer(Modifier.height(16.dp))
@@ -237,7 +241,7 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
             Btn(if (step == 4) "Tomar posse" else "Continuar", Modifier.fillMaxWidth(), BtnKind.PRIMARY,
                 if (step == 4) Icons.Rounded.Flag else null, enabled = canNext) {
                 if (step < 4) step++
-                else onStart(Settings(crises.toMutableSet(), System.currentTimeMillis() % 100000, randomEvents), city, Politician(name.trim(), party), parties)
+                else onStart(Settings(crises.toMutableSet(), System.currentTimeMillis() % 100000, randomEvents), city, Politician(name.trim(), party), parties, role)
             }
         }
     }

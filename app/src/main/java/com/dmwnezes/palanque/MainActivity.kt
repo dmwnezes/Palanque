@@ -93,8 +93,8 @@ private fun App(store: SaveStore) {
             }
             Screen.NEW_GAME -> {
                 BackHandler { screen = Screen.HOME }
-                NewGameFlow(BrHolder.br!!, onBack = { screen = Screen.HOME }) { settings, city, player, parties ->
-                    start(Setup.newGame(BrHolder.br!!, settings, city, player, parties))
+                NewGameFlow(BrHolder.br!!, onBack = { screen = Screen.HOME }) { settings, city, player, parties, role ->
+                    start(Setup.newGame(BrHolder.br!!, settings, city, player, parties, role = role))
                     controller?.autosave()
                 }
             }
@@ -103,6 +103,7 @@ private fun App(store: SaveStore) {
                     c, store,
                     onExit = { if (c.game.gameOver == null) c.saveNow(); controller = null; homeKey++; screen = Screen.HOME },
                     onLoad = { slot -> store.load(slot)?.let { start(it) } },
+                    onSwitch = { ng -> start(ng); controller?.autosave() },
                 )
             }
         }

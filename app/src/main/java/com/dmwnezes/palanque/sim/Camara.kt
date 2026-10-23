@@ -50,9 +50,56 @@ object Laws {
             mapOf(Area.CULTURA to 6.0), aprov = 1.0, costPc = 12.0),
     )
 
+    /** Leis estaduais (Assembleia). */
+    val ESTADO = listOf(
+        LawDef("icms_cesta", "ICMS zero na cesta básica", "Comida mais barata; o estado arrecada menos", -0.3f, 0f,
+            mapOf(Area.ECONOMIA to 2.0), aprov = 3.0, costPc = 60.0),
+        LawDef("pm_escolas", "Polícia nas escolas", "Ronda escolar da PM em todo o estado", 0.3f, 0.6f,
+            mapOf(Area.SEGURANCA to 3.0, Area.EDUCACAO to 1.0), aprov = 1.0, costPc = 20.0),
+        LawDef("camera_pm", "Câmeras nas fardas da PM", "Gravação das abordagens policiais", -0.4f, -0.6f,
+            mapOf(Area.SEGURANCA to 2.0), aprov = 0.5, costPc = 8.0),
+        LawDef("ensino_medio_integral", "Ensino médio integral", "Todas as escolas estaduais em tempo integral", -0.2f, 0f,
+            mapOf(Area.EDUCACAO to 6.0), aprov = 1.0, costPc = 70.0),
+        LawDef("privatiza_agua", "Privatização da companhia de água", "Empresa privada assume o saneamento", 0.8f, 0f,
+            mapOf(Area.SANEAMENTO to 8.0), aprov = -2.0, costPc = -30.0),
+        LawDef("incentivo_industria", "Incentivo fiscal à indústria", "Desconto de ICMS para quem gerar empregos", 0.6f, 0f,
+            mapOf(Area.ECONOMIA to 6.0), aprov = 0.5, costPc = 40.0),
+        LawDef("passe_intermunicipal", "Passe livre intermunicipal", "Estudantes viajam de graça entre cidades", -0.5f, -0.2f,
+            mapOf(Area.TRANSPORTE to 4.0, Area.EDUCACAO to 1.0), aprov = 2.0, costPc = 25.0),
+        LawDef("desmatamento_zero", "Desmatamento zero", "Fiscalização e multas pesadas", -0.4f, -0.4f,
+            mapOf(Area.AMBIENTE to 7.0, Area.ECONOMIA to -2.0), costPc = 10.0),
+    )
+
+    /** Leis federais (Câmara dos Deputados): valem para todo o país, inclusive o seu estado. */
+    val FEDERAL = listOf(
+        LawDef("reforma_tributaria", "Isenção de IR até R$ 5 mil", "Quem ganha pouco deixa de pagar Imposto de Renda", -0.4f, 0f,
+            mapOf(Area.ECONOMIA to 3.0), aprov = 4.0),
+        LawDef("arcabouco", "Teto de gastos mais duro", "Corta despesas para reduzir a dívida pública", 0.8f, 0f,
+            mapOf(Area.ECONOMIA to 3.0, Area.SAUDE to -2.0, Area.EDUCACAO to -2.0), aprov = -2.0),
+        LawDef("piso_enfermagem", "Piso da enfermagem", "Salário mínimo nacional para enfermeiros", -0.5f, -0.1f,
+            mapOf(Area.SAUDE to 3.0), aprov = 2.0),
+        LawDef("pec_seguranca", "PEC da segurança pública", "Polícia Federal e estados integrados contra o crime", 0.3f, 0.5f,
+            mapOf(Area.SEGURANCA to 4.0), aprov = 2.0),
+        LawDef("marco_saneamento", "Novo marco do saneamento", "Metas de esgoto e concessões privadas", 0.6f, 0f,
+            mapOf(Area.SANEAMENTO to 5.0), aprov = 0.5),
+        LawDef("escala_6x1", "Fim da escala 6x1", "Dois dias de folga por semana para todos", -0.7f, -0.2f,
+            mapOf(Area.ECONOMIA to -2.0), aprov = 4.0),
+        LawDef("porte_armas", "Ampliar porte de armas", "Mais facilidade para o cidadão andar armado", 0.5f, 0.9f,
+            mapOf(Area.SEGURANCA to 1.0), aprov = -1.0),
+        LawDef("bolsa_familia", "Bolsa Família maior", "Aumenta o valor pago às famílias pobres", -0.8f, -0.2f,
+            mapOf(Area.ECONOMIA to 2.0, Area.SAUDE to 1.0), aprov = 3.0),
+    )
+
+    /** Leis que a casa de um cargo pode votar. */
+    fun forRole(r: Role) = when {
+        r == Role.DEP_FEDERAL -> FEDERAL
+        r.level == Level.ESTADO -> ESTADO
+        else -> READY
+    }
+
     val INTENSITY = listOf("Pequena", "Média", "Grande")
 
-    fun fromCustom(c: CustomLaw): LawDef {
+    fun fromCustom(c: CustomLaw, level: Level = Level.CIDADE): LawDef {
         val k = c.intensity.coerceIn(1, 3)
         val gain = listOf(3.0, 5.0, 8.0)[k - 1]
         val pays = c.funding == 0
@@ -61,16 +108,44 @@ object Laws {
             "${c.area.label} +${gain.toInt()} · " + if (pays) "a prefeitura paga" else "paga com nova taxa",
             c.ideo, 0f, mapOf(c.area to gain),
             aprov = if (pays) 0.6 * k else -1.0 * k,
-            costPc = if (pays) c.area.ref * listOf(0.05, 0.1, 0.18)[k - 1] else 0.0,
+            costPc = if (pays) c.area.ref(level) * listOf(0.05, 0.1, 0.18)[k - 1] else 0.0,
             custom = true,
         )
     }
 
-    fun def(g: Game, id: String): LawDef = READY.firstOrNull { it.id == id } ?: fromCustom(g.customLaws.first { it.id == id })
+    private val ALL by lazy { (READY + ESTADO + FEDERAL).associateBy { it.id } }
+
+    fun def(g: Game, id: String): LawDef = ALL[id] ?: fromCustom(g.customLaws.first { it.id == id }, g.level)
 }
 
-/** Câmara Municipal: vereadores, relação com o prefeito, votações e negociação. */
+/**
+ * Casa legislativa da jurisdição (Câmara Municipal, Assembleia Legislativa ou Câmara dos Deputados):
+ * membros, relação com você, votações e negociação.
+ */
 object Camara {
+    /** Bancada federal de cada estado (deputados federais). */
+    val FEDERAIS = mapOf(
+        12 to 8, 27 to 9, 16 to 8, 13 to 8, 29 to 39, 23 to 22, 53 to 8, 32 to 10, 52 to 17, 21 to 18, 51 to 8, 50 to 8, 31 to 53,
+        15 to 17, 25 to 12, 41 to 30, 26 to 25, 22 to 10, 33 to 46, 24 to 8, 43 to 31, 11 to 8, 14 to 8, 42 to 16, 35 to 70, 28 to 8, 17 to 8,
+    )
+
+    /** Deputados estaduais: o triplo da bancada federal até 36, depois um a mais por federal acima de 12 (art. 27). */
+    fun assembleia(uf: Int): Int { val f = FEDERAIS[uf] ?: 8; return if (f <= 12) 3 * f else 36 + (f - 12) }
+
+    /** Tamanho da casa do cargo. */
+    fun houseSize(g: Game): Int = when {
+        g.role == Role.DEP_FEDERAL -> 513
+        g.level == Level.ESTADO -> assembleia(g.uf)
+        else -> seats(g.pop)
+    }
+
+    /** Vagas disputadas pelo cargo na sua jurisdição (para a eleição proporcional). */
+    fun constituencySeats(r: Role, g: Game): Int = when (r) {
+        Role.DEP_FEDERAL -> FEDERAIS[g.uf] ?: 8
+        Role.DEP_ESTADUAL -> assembleia(g.uf)
+        else -> seats(g.pop)
+    }
+
     /** Número de vereadores pela população (Constituição, art. 29, IV). */
     fun seats(pop: Double): Int {
         val limits = listOf(15e3, 30e3, 50e3, 80e3, 120e3, 160e3, 300e3, 450e3, 600e3, 750e3, 900e3, 1.05e6, 1.2e6, 1.35e6, 1.5e6,
@@ -81,10 +156,16 @@ object Camara {
 
     fun ideoDistance(e1: Float, s1: Float, e2: Float, s2: Float) = (abs(e1 - e2) + abs(s1 - s2)) / 2.0
 
-    /** Para onde a relação de um vereador caminha. */
+    /** Para onde a relação de um membro com você caminha. */
     fun target(s: Sim, v: Vereador): Double {
         val g = s.game
         val p = s.party
+        if (!s.governs) {
+            // parlamentar ou candidato: afinidade, capital político e favores
+            val same = if (v.party == p.id) 35.0 else 0.0
+            val gov = if (v.party == g.execParty) g.stance * 10.0 else 0.0
+            return (same - 45 * ideoDistance(v.econ, v.social, p.econ, p.social) + 10 + g.career.capital * 0.3 + gov + v.favor).coerceIn(-100.0, 100.0)
+        }
         val same = if (v.party == p.id) 35.0 else 0.0
         val dist = ideoDistance(v.econ, v.social, p.econ, p.social)
         val sec = if (g.secretarios.any { it?.party == v.party }) 12.0 else 0.0
@@ -103,7 +184,7 @@ object Camara {
     fun elect(s: Sim, playerShare: Double = 0.15) {
         val g = s.game
         val r = s.rng(555 + g.termNumber)
-        val n = seats(g.pop)
+        val n = houseSize(g)
         val parties = g.parties.filter { !it.custom || it.id == g.player.party }
         g.camara.clear()
         g.cargos = 0
@@ -134,6 +215,7 @@ object Camara {
             v.favor *= 0.9
             v.relation += (target(s, v) - v.relation) * 0.12
         }
+        if (!s.governs) return
         // CPI quando a oposição domina
         val opp = g.camara.count { stance(it) < 0 }
         if (g.settings.randomEvents && opp * 2 > g.camara.size && g.events.isEmpty() && s.rng(808).nextDouble() < 0.05)
@@ -143,42 +225,56 @@ object Camara {
             g.events += PendingEvent("cassacao", g.day)
     }
 
-    /** Lei com custo, efeitos e ideologia — chance de cada vereador votar a favor. */
-    fun chance(s: Sim, v: Vereador, law: LawDef, revoke: Boolean): Double {
+    /** Relação de um membro com o governo da IA (para os projetos do governo). */
+    fun execRelation(s: Sim, v: Vereador): Double {
+        val g = s.game
+        val ep = s.partyOf(g.execParty)
+        return (if (v.party == ep.id) 40.0 else 0.0) - 45 * ideoDistance(v.econ, v.social, ep.econ, ep.social) + 10 + (g.execApproval - 50) * 0.6
+    }
+
+    /** Lei com custo, efeitos e ideologia — chance de cada membro votar a favor. */
+    fun chance(s: Sim, v: Vereador, law: LawDef, revoke: Boolean, author: String = "player"): Double {
         val d = ideoDistance(v.econ, v.social, law.econ, law.social)
         val fit = if (revoke) d - 0.6 else 0.6 - d
-        val score = v.relation * 0.6 + 35 * fit + (s.game.approval - 50) * 0.4
+        val rel = if (author == "exec" && !s.governs) execRelation(s, v) else v.relation
+        val score = rel * 0.6 + 35 * fit + (s.game.execApproval - 50) * 0.4
         return 1 / (1 + exp(-score / 12))
     }
 
     class Count(val yes: Int, val no: Int, val maybe: Int)
 
-    fun count(s: Sim, b: Bill): Count = count(s, Laws.def(s.game, b.law), b.revoke)
+    fun count(s: Sim, b: Bill): Count = count(s, Laws.def(s.game, b.law), b.revoke, b.author)
 
-    fun count(s: Sim, law: LawDef, revoke: Boolean): Count {
+    fun count(s: Sim, law: LawDef, revoke: Boolean, author: String = "player"): Count {
         var y = 0; var n = 0; var m = 0
         for (v in s.game.camara) {
-            val p = chance(s, v, law, revoke)
+            val p = chance(s, v, law, revoke, author)
             when { p >= 0.65 -> y++; p <= 0.35 -> n++; else -> m++ }
         }
         return Count(y, n, m)
     }
 
-    fun pending(s: Sim): Bill? = s.game.bills.firstOrNull { it.status == "tramitando" }
+    /** Seu projeto em votação. */
+    fun pending(s: Sim): Bill? = s.game.bills.firstOrNull { it.status == "tramitando" && it.author == "player" }
+    /** Projeto do governo em votação (quando você é parlamentar). */
+    fun execBill(s: Sim): Bill? = s.game.bills.firstOrNull { it.status == "tramitando" && it.author == "exec" }
+
+    /** Maioria simples da casa (contando você, quando é membro). */
+    fun majority(s: Sim) = (s.game.camara.size + (if (s.legislates) 1 else 0)) / 2 + 1
 
     /** Envia um projeto; a votação acontece em 30 dias. */
     fun send(s: Sim, lawId: String, revoke: Boolean = false): String? {
         val g = s.game
-        if (g.bills.any { it.status == "tramitando" }) return "Já há um projeto em votação"
+        if (pending(s) != null) return "Já há um projeto seu em votação"
         if (!revoke && lawId in g.laws) return "Essa lei já está em vigor"
         g.bills += Bill(g.nextId++, lawId, g.day, g.day + 30, revoke)
         val name = Laws.def(g, lawId).name
-        s.news("gavel", if (revoke) "Projeto para revogar \"$name\" chega à Câmara" else "Projeto \"$name\" chega à Câmara", 0)
+        s.news("gavel", if (revoke) "Projeto para revogar \"$name\" chega à ${g.role.house}" else "Projeto \"$name\" chega à ${g.role.house}", 0)
         return null
     }
 
     fun withdraw(s: Sim) {
-        val b = s.game.bills.firstOrNull { it.status == "tramitando" } ?: return
+        val b = pending(s) ?: return
         b.status = "retirado"
         s.news("gavel", "Projeto retirado da Câmara", 0)
     }
@@ -188,18 +284,23 @@ object Camara {
         val law = Laws.def(g, b.law)
         val r = s.rng(b.id)
         var yes = 0
-        for (v in g.camara) if (r.nextDouble() < chance(s, v, law, b.revoke)) yes++
-        b.yes = yes; b.no = g.camara.size - yes
-        val ok = yes * 2 > g.camara.size
+        for (v in g.camara) if (r.nextDouble() < chance(s, v, law, b.revoke, b.author)) yes++
+        var total = g.camara.size
+        // você também vota quando é membro da casa
+        if (s.legislates) { total++; if (b.playerVote == 1) yes++ }
+        b.yes = yes; b.no = total - yes
+        val ok = yes * 2 > total
         b.status = if (ok) "aprovado" else "rejeitado"
         if (ok) { if (b.revoke) g.laws.remove(b.law) else g.laws += b.law }
-        s.news(if (ok) "check" else "broken", (if (ok) "Câmara aprova" else "Câmara rejeita") + " \"${law.name}\": $yes a ${b.no}", if (ok) 1 else 2)
+        val house = if (g.role == Role.DEP_FEDERAL) "Câmara dos Deputados" else if (g.level == Level.ESTADO) "Assembleia" else "Câmara"
+        s.news(if (ok) "check" else "broken", (if (ok) "$house aprova" else "$house rejeita") + " \"${law.name}\": $yes a ${b.no}", if (ok) 1 else 2)
+        Legislativo.afterVote(s, b, ok)
     }
 
     // ───────────── negociação (uma de cada por projeto) ─────────────
 
-    fun emendaCost(s: Sim) = max(150_000.0, s.game.pop * 1.5)
-    fun cargoCost(s: Sim) = max(90_000.0, s.game.pop * 0.6)
+    fun emendaCost(s: Sim) = if (s.legislates) Legislativo.emendaBudget(s) * 0.1 else max(150_000.0, s.game.pop * (if (s.level == Level.CIDADE) 1.5 else 0.15))
+    fun cargoCost(s: Sim) = max(90_000.0, s.game.pop * (if (s.level == Level.CIDADE) 0.6 else 0.06))
 
     fun talk(s: Sim, v: Vereador, bill: Int): String? {
         if (v.talked == bill) return "Vocês já conversaram sobre este projeto"
@@ -210,8 +311,14 @@ object Camara {
     fun fund(s: Sim, v: Vereador, bill: Int): String? {
         if (v.funded == bill) return "Já liberou emenda para ele neste projeto"
         val c = emendaCost(s)
-        if (s.game.cash < c) return "Falta caixa (${Fmt.money(c)})"
-        s.game.cash -= c
+        if (s.legislates) {
+            // parlamentar paga com as próprias emendas
+            if (s.game.emendasLeft < c) return "Faltam emendas (${Fmt.money(c)})"
+            s.game.emendasLeft -= c
+        } else {
+            if (s.game.cash < c) return "Falta caixa (${Fmt.money(c)})"
+            s.game.cash -= c
+        }
         v.funded = bill; v.favor += 18; v.relation = (v.relation + 18).coerceAtMost(100.0)
         return null
     }

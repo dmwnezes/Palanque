@@ -55,7 +55,7 @@ class ScreensRenderTest {
 
     @Test fun newGame() {
         rule.mainClock.autoAdvance = false
-        rule.setContent { PalanqueTheme { NewGameFlow(TestBr.br, {}) { _, _, _, _ -> } } }
+        rule.setContent { PalanqueTheme { NewGameFlow(TestBr.br, {}) { _, _, _, _, _ -> } } }
         shot("02_novo_jogo")
         rule.onAllNodes(hasSetTextAction())[0].performTextInput("Daniel Menezes")
         rule.onNodeWithText("Continuar").performClick()
@@ -106,7 +106,10 @@ class ScreensRenderTest {
         shot("40_evento")
         rule.runOnIdle {
             sim.game.events.clear()
-            while (sim.game.election == null) { sim.advanceDay(); sim.game.events.clear() }
+            while (sim.game.election == null) {
+                sim.advanceDay(); sim.game.events.clear()
+                if (sim.game.candidacyPending) com.dmwnezes.palanque.sim.Elections.declare(sim, if (com.dmwnezes.palanque.sim.Elections.isMunicipal(sim.date.year)) com.dmwnezes.palanque.sim.Role.PREFEITO else null)
+            }
             c.refresh()
         }
         shot("41_convencao")
@@ -135,6 +138,52 @@ class ScreensRenderTest {
         shot("42_resultado")
         rule.runOnIdle { sim.game.election?.seen = true; c.layer = Layer.VOTOS; c.refresh() }
         shot("43_mapa_votos")
+    }
+
+    /** Governador do Ceará: mapa do estado, municípios, orçamento estadual, Assembleia. */
+    @Test fun governor() {
+        val sim = TestBr.newSim(role = com.dmwnezes.palanque.sim.Role.GOVERNADOR)
+        val c = GameController(sim, store(), MainScope())
+        rule.mainClock.autoAdvance = false
+        rule.setContent { PalanqueTheme { GameScreen(c, store(), {}, {}) } }
+        shot("60_governador")
+        rule.runOnIdle {
+            sim.build("hosp_regional", sim.game.bairros.indices.maxBy { sim.game.bairros[it].popShare })
+            repeat(40) { sim.advanceDay(); sim.game.events.clear() }
+            c.select(sim.game.bairros.indices.maxBy { sim.game.bairros[it].popShare })
+        }
+        shot("61_municipio")
+        for ((t, k) in listOf(Tab.GOVERNO to 0, Tab.GOVERNO to 1, Tab.OBRAS to 0, Tab.CAMARA to 0)) {
+            rule.runOnIdle { c.select(-1); c.tab = t; c.subTab[t] = k; c.refresh() }
+            shot("6${2 + listOf(Tab.GOVERNO to 0, Tab.GOVERNO to 1, Tab.OBRAS to 0, Tab.CAMARA to 0).indexOf(t to k)}_${t.name.lowercase()}$k")
+        }
+    }
+
+    /** Vereador e deputado: abas do mandato legislativo, candidatura e fora do cargo. */
+    @Test fun legislator() {
+        val sim = TestBr.newSim(role = com.dmwnezes.palanque.sim.Role.VEREADOR)
+        val c = GameController(sim, store(), MainScope())
+        rule.mainClock.autoAdvance = false
+        rule.setContent { PalanqueTheme { GameScreen(c, store(), {}, {}) } }
+        shot("70_vereador")
+        rule.runOnIdle {
+            while (com.dmwnezes.palanque.sim.Camara.execBill(sim) == null) { sim.advanceDay(); sim.game.events.clear() }
+            com.dmwnezes.palanque.sim.Legislativo.sendEmenda(sim, 0, com.dmwnezes.palanque.sim.Area.SAUDE, sim.game.emendasLeft / 3)
+            c.tab = Tab.CAMARA; c.subTab[Tab.CAMARA] = 1; c.refresh()
+        }
+        shot("71_votacao")
+        rule.runOnIdle { c.tab = Tab.EMENDAS; c.emendaTarget = 2; c.refresh() }
+        shot("72_emendas")
+        rule.runOnIdle { c.tab = Tab.MANDATO; c.refresh() }
+        shot("73_mandato")
+        rule.runOnIdle {
+            c.tab = null
+            while (!sim.game.candidacyPending) { sim.advanceDay(); sim.game.events.clear() }
+            c.refresh()
+        }
+        shot("74_candidatura")
+        rule.runOnIdle { com.dmwnezes.palanque.sim.Elections.declare(sim, null); sim.game.gapPending = true; c.refresh() }
+        shot("75_fora_do_cargo")
     }
 
     @Test fun bigCity() {

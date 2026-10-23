@@ -6,32 +6,50 @@ import java.time.LocalDate
 /** Mandatos municipais começam em 1º de janeiro de 2029. */
 val START_DATE: LocalDate = LocalDate.of(2029, 1, 1)
 
-/** Áreas de governo. `ref` = gasto anual de referência por habitante (R$) num município médio. */
-enum class Area(val label: String, val short: String, val ref: Double, val weight: Double) {
-    SAUDE("Saúde", "Saúde", 950.0, 0.20),
-    EDUCACAO("Educação", "Educação", 1050.0, 0.17),
-    SEGURANCA("Segurança", "Segurança", 70.0, 0.16),
-    ECONOMIA("Economia e emprego", "Economia", 60.0, 0.16),
-    TRANSPORTE("Transporte", "Transporte", 180.0, 0.08),
-    SANEAMENTO("Saneamento", "Saneamento", 140.0, 0.08),
-    CULTURA("Cultura e lazer", "Cultura", 45.0, 0.05),
-    AMBIENTE("Meio ambiente", "Ambiente", 50.0, 0.06),
-    TURISMO("Turismo", "Turismo", 35.0, 0.04);
+/**
+ * Áreas de governo. `ref` = gasto anual de referência por habitante (R$) num município médio;
+ * `refState` = o mesmo para um governo estadual (polícia e ensino médio pesam mais).
+ */
+enum class Area(val label: String, val short: String, val ref: Double, val weight: Double, val refState: Double) {
+    SAUDE("Saúde", "Saúde", 950.0, 0.20, 650.0),
+    EDUCACAO("Educação", "Educação", 1050.0, 0.17, 900.0),
+    SEGURANCA("Segurança", "Segurança", 70.0, 0.16, 450.0),
+    ECONOMIA("Economia e emprego", "Economia", 60.0, 0.16, 60.0),
+    TRANSPORTE("Transporte", "Transporte", 180.0, 0.08, 150.0),
+    SANEAMENTO("Saneamento", "Saneamento", 140.0, 0.08, 80.0),
+    CULTURA("Cultura e lazer", "Cultura", 45.0, 0.05, 30.0),
+    AMBIENTE("Meio ambiente", "Ambiente", 50.0, 0.06, 40.0),
+    TURISMO("Turismo", "Turismo", 35.0, 0.04, 25.0);
+
+    fun ref(level: Level) = if (level == Level.CIDADE) ref else refState
 
     /** "a saúde" / "o transporte" */
     val the get() = (if (this in listOf(TRANSPORTE, SANEAMENTO, AMBIENTE, TURISMO)) "o " else "a ") + label.lowercase()
 
-    companion object { val REF_TOTAL = entries.sumOf { it.ref } }
+    companion object { fun refTotal(level: Level) = entries.sumOf { it.ref(level) } }
 }
 
-enum class Role(val label: String, val playable: Boolean, val desc: String) {
-    VEREADOR("Vereador", false, "Câmara Municipal · negocia e vota"),
-    PREFEITO("Prefeito", true, "Governa a cidade"),
-    DEP_ESTADUAL("Deputado estadual", false, "Assembleia Legislativa"),
-    GOVERNADOR("Governador", false, "Governa o estado"),
-    DEP_FEDERAL("Deputado federal", false, "Câmara dos Deputados"),
-    SENADOR("Senador", false, "Senado Federal · 8 anos"),
-    PRESIDENTE("Presidente", false, "Governa o país"),
+/** Onde o cargo atua: uma cidade (com bairros) ou um estado (com municípios). */
+enum class Level { CIDADE, ESTADO }
+
+/**
+ * Cargos. municipal = eleito nas eleições municipais (2032, 2036…); os outros nas gerais (2030, 2034…).
+ * house = casa legislativa do nível; members = como se chamam os membros.
+ */
+enum class Role(
+    val label: String, val playable: Boolean, val desc: String, val level: Level, val executive: Boolean, val municipal: Boolean,
+    val house: String, val members: String,
+) {
+    VEREADOR("Vereador", true, "Câmara Municipal · vota e manda emendas", Level.CIDADE, false, true, "Câmara Municipal", "vereadores"),
+    PREFEITO("Prefeito", true, "Governa a cidade", Level.CIDADE, true, true, "Câmara Municipal", "vereadores"),
+    DEP_ESTADUAL("Deputado estadual", true, "Assembleia Legislativa", Level.ESTADO, false, false, "Assembleia Legislativa", "deputados"),
+    GOVERNADOR("Governador", true, "Governa o estado", Level.ESTADO, true, false, "Assembleia Legislativa", "deputados"),
+    DEP_FEDERAL("Deputado federal", true, "Câmara dos Deputados, eleito pelo estado", Level.ESTADO, false, false, "Câmara dos Deputados", "deputados"),
+    SENADOR("Senador", false, "Senado Federal · 8 anos", Level.ESTADO, false, false, "Senado Federal", "senadores"),
+    PRESIDENTE("Presidente", false, "Governa o país", Level.ESTADO, true, false, "Congresso Nacional", "parlamentares");
+
+    /** cargo executivo do mesmo nível (quem governa enquanto você legisla) */
+    val governor get() = if (level == Level.CIDADE) PREFEITO else if (this == DEP_FEDERAL) PRESIDENTE else GOVERNADOR
 }
 
 /** Tipos de crise que podem ser desligados no novo jogo. */
@@ -77,6 +95,27 @@ class BairroState(
     var bump: Double = 0.0,
     /** comícios feitos nesta campanha */
     var rallies: Int = 0,
+    /** apoio construído com emendas e obras do mandato legislativo (cai devagar) */
+    var local: Double = 0.0,
+    /** só nos estados: prefeito do município e relação com você */
+    var mayorName: String = "",
+    var mayorParty: String = "",
+    var mayorRel: Double = 0.0,
+)
+
+/** Um cargo já exercido. */
+@Serializable
+class CareerEntry(val role: Role, val place: String, val from: Int, val to: Int, val approval: Double)
+
+/** Carreira: o que passa de um cargo para outro. */
+@Serializable
+class Career(
+    /** cidade onde a carreira começou (disputa os cargos municipais aqui) */
+    val homeCity: Int,
+    val history: MutableList<CareerEntry> = mutableListOf(),
+    /** inelegível até este ano */
+    var ineligibleUntil: Int = 0,
+    var capital: Double = 20.0,
 )
 
 @Serializable
@@ -163,6 +202,10 @@ class Bill(
     val voteDay: Int,
     /** revogar uma lei em vigor em vez de criar */
     val revoke: Boolean = false,
+    /** "player" ou "exec" (projeto do governo, quando você é parlamentar) */
+    val author: String = "player",
+    /** seu voto quando você é parlamentar: 1 sim, −1 não, 0 abstenção */
+    var playerVote: Int = 0,
     var status: String = "tramitando",
     var yes: Int = 0,
     var no: Int = 0,
@@ -220,6 +263,10 @@ class Election(
     val debatesDone: MutableList<Int> = mutableListOf(),
     /** intenção de voto em você por bairro, da última pesquisa */
     var pollBairro: List<Double> = emptyList(),
+    /** cargo em disputa */
+    val office: Role = Role.PREFEITO,
+    /** eleição proporcional (vereador e deputados): totals = [seus votos, quociente] */
+    val proportional: Boolean = false,
 )
 
 /** Candidato a vice: partido, bairro onde é conhecido e fama (1 a 5). */
@@ -294,4 +341,37 @@ class Game(
     /** cargos comissionados dados a vereadores */
     var cargos: Int = 0,
     val campaignPromises: MutableList<CampaignPromise> = mutableListOf(),
+    // ── carreira e níveis ──
+    val level: Level = Level.CIDADE,
+    /** estado da jurisdição (nas cidades, o estado da cidade) */
+    val uf: Int = cityCode / 100000,
+    val career: Career = Career(cityCode),
+    /** false = sem mandato (candidato ou esperando a próxima eleição) */
+    var inOffice: Boolean = true,
+    /** cargo que está disputando na eleição deste ano */
+    var running: Role? = null,
+    /** escolha de candidatura aberta (20 de julho dos anos de eleição) */
+    var candidacyPending: Boolean = false,
+    /** mandato acabou e não há cargo: escolher quando voltar */
+    var gapPending: Boolean = false,
+    // ── mandato legislativo ──
+    /** 1 base do governo, 0 independente, −1 oposição */
+    var stance: Int = 0,
+    var execName: String = "",
+    var execParty: String = "",
+    /** relação do governo (prefeito, governador ou presidente) com você */
+    var execRel: Double = 0.0,
+    /** aprovação do governo quando não é você quem governa */
+    var execApproval: Double = 50.0,
+    /** relação com o seu partido (−100 a 100) */
+    var partyRel: Double = 50.0,
+    /** emendas ainda disponíveis neste ano */
+    var emendasLeft: Double = 0.0,
+    var lastSpeech: Int = -999,
+    var lastCpi: Int = -999,
+    val emendas: MutableList<EmendaLog> = mutableListOf(),
 )
+
+/** Emenda parlamentar mandada para uma região. */
+@Serializable
+class EmendaLog(val day: Int, val unit: Int, val area: Area, val amount: Double)

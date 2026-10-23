@@ -54,7 +54,7 @@ fun ConventionCard(c: GameController) {
     Overlay({}, dismissable = false) {
         Icon(Icons.Rounded.Groups, null, tint = Ink.gold, modifier = Modifier.size(40.dp).align(Alignment.CenterHorizontally))
         Text("Convenção do ${s.party.sigla}", style = Type.title.copy(fontSize = 22.sp), color = Ink.text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        Text("Sua candidatura à reeleição. Escolha o vice e quem sobe no palanque com você.", style = Type.body, color = Ink.muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text("Sua candidatura a ${e.office.label.lowercase()}. Escolha o vice e quem sobe no palanque com você.", style = Type.body, color = Ink.muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
         Column(Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState())) {
             Text("Vice", style = Type.label, color = Ink.muted)
@@ -149,14 +149,16 @@ fun DebateCard(c: GameController) {
 fun CampaignTimeline(c: GameController) {
     val s = c.sim
     val g = c.game
-    val dd = Elections.debateDays(s)
-    val steps = listOf(
-        "Convenção" to Elections.conventionDay(s),
-        "Campanha nas ruas" to Elections.campaignStart(s),
-        "1º debate" to dd[0],
-        "2º debate" to dd[1],
-        "1º turno" to s.dayOf(s.firstSunday(s.termEndYear, 10)),
-        "2º turno (se houver)" to s.dayOf(s.lastSunday(s.termEndYear, 10)),
+    val y = Elections.year(s)
+    val dd = Elections.debateDays(s, y)
+    val exec = g.election?.proportional != true
+    val steps = listOfNotNull(
+        "Convenção" to Elections.conventionDay(s, y),
+        "Campanha nas ruas" to Elections.campaignStart(s, y),
+        ("1º debate" to dd[0]).takeIf { exec },
+        ("2º debate" to dd[1]).takeIf { exec },
+        "1º turno" to Elections.firstRoundDay(s, y),
+        ("2º turno (se houver)" to s.dayOf(s.lastSunday(y, 10))).takeIf { exec },
     )
     Column(Modifier.fillMaxWidth().clip(Shapes.tile).background(Ink.raised).padding(12.dp)) {
         for ((label, day) in steps) {

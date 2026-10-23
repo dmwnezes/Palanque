@@ -1,7 +1,7 @@
 package com.dmwnezes.palanque.sim
 
 /** Obra do catálogo: custo em R$, prazo em meses, quantas pessoas atende. */
-class ObraType(val id: String, val name: String, val area: Area, val cost: Double, val months: Int, val serves: Double, val icon: String, val desc: String)
+class ObraType(val id: String, val name: String, val area: Area, val cost: Double, val months: Int, val serves: Double, val icon: String, val desc: String, val level: Level = Level.CIDADE)
 
 object Content {
     /** Partidos com registro no TSE (tamanho e posição aproximados, só para o jogo). */
@@ -61,7 +61,29 @@ object Content {
         ObraType("eventos", "Centro de eventos", Area.TURISMO, 18e6, 16, 80000.0, "stage", "Feiras, shows e congressos"),
     )
 
-    fun obra(id: String) = OBRAS.first { it.id == id }
+    /** Obras do governo estadual: maiores, mais caras, atendem regiões inteiras. */
+    val OBRAS_ESTADO = listOf(
+        ObraType("hosp_regional", "Hospital regional", Area.SAUDE, 70e6, 24, 400_000.0, "hospital", "Alta complexidade para a região", Level.ESTADO),
+        ObraType("policlinica", "Policlínica estadual", Area.SAUDE, 18e6, 12, 150_000.0, "emergency", "Especialistas e exames", Level.ESTADO),
+        ObraType("escola_medio", "Escola de ensino médio", Area.EDUCACAO, 14e6, 14, 20_000.0, "school", "Ensino médio em tempo integral", Level.ESTADO),
+        ObraType("campus", "Campus da universidade estadual", Area.EDUCACAO, 90e6, 30, 600_000.0, "tech", "Graduação perto de casa", Level.ESTADO),
+        ObraType("batalhao", "Batalhão da Polícia Militar", Area.SEGURANCA, 16e6, 10, 150_000.0, "shield", "Mais viaturas e policiais", Level.ESTADO),
+        ObraType("delegacia", "Delegacia regional", Area.SEGURANCA, 6e6, 8, 80_000.0, "siren", "Polícia Civil e investigação", Level.ESTADO),
+        ObraType("presidio", "Presídio", Area.SEGURANCA, 90e6, 30, 1_200_000.0, "gavel", "Vagas no sistema prisional", Level.ESTADO),
+        ObraType("polo_industrial", "Polo industrial", Area.ECONOMIA, 45e6, 18, 500_000.0, "factory", "Infraestrutura para indústrias", Level.ESTADO),
+        ObraType("rodovia", "Duplicação de rodovia", Area.TRANSPORTE, 130e6, 24, 400_000.0, "road", "Estrada segura entre cidades", Level.ESTADO),
+        ObraType("metro", "Metrô ou VLT", Area.TRANSPORTE, 700e6, 48, 1_500_000.0, "bus", "Transporte de massa na capital", Level.ESTADO),
+        ObraType("adutora", "Adutora", Area.SANEAMENTO, 95e6, 24, 300_000.0, "water", "Água do açude até as cidades", Level.ESTADO),
+        ObraType("ete_estadual", "Saneamento regional", Area.SANEAMENTO, 75e6, 24, 500_000.0, "plant", "Esgoto tratado em várias cidades", Level.ESTADO),
+        ObraType("teatro", "Centro cultural estadual", Area.CULTURA, 35e6, 18, 800_000.0, "theater", "Teatro, museu e biblioteca", Level.ESTADO),
+        ObraType("parque_estadual", "Parque estadual", Area.AMBIENTE, 15e6, 12, 300_000.0, "tree", "Área protegida e trilhas", Level.ESTADO),
+        ObraType("aeroporto", "Aeroporto regional", Area.TURISMO, 95e6, 30, 700_000.0, "stage", "Voos para o interior", Level.ESTADO),
+        ObraType("convencoes", "Centro de convenções", Area.TURISMO, 60e6, 24, 1_000_000.0, "stage", "Feiras e congressos nacionais", Level.ESTADO),
+    )
+
+    fun obrasFor(level: Level) = if (level == Level.CIDADE) OBRAS else OBRAS_ESTADO
+
+    fun obra(id: String) = OBRAS.firstOrNull { it.id == id } ?: OBRAS_ESTADO.first { it.id == id }
 
     private val FIRST = listOf(
         "Ana", "Maria", "Francisca", "Antônia", "Adriana", "Juliana", "Márcia", "Fernanda", "Patrícia", "Aline", "Sandra", "Camila",

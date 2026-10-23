@@ -123,15 +123,20 @@ private fun VereadorRow(c: GameController, v: Vereador, billKey: Int, expanded: 
             Spacer(Modifier.height(10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Btn("Conversar", icon = Icons.Rounded.Forum, enabled = v.talked != billKey) { c.act("Conversa com ${v.name}") { Camara.talk(s, v, billKey) } }
-                Btn("Emenda ${Fmt.money(Camara.emendaCost(s))}", icon = Icons.Rounded.Payments, enabled = v.funded != billKey) {
-                    c.act("Emenda liberada para o reduto") { Camara.fund(s, v, billKey) }
-                }
-                Btn("Dar cargo", icon = Icons.Rounded.Badge, enabled = !v.hasCargo) { c.act("Cargo para indicado de ${v.name}") { Camara.cargo(s, v) } }
-                Btn("Prometer obra", icon = Icons.Rounded.Construction, enabled = v.promised < c.game.day - 365) {
-                    c.act("Obra prometida ${Fmt.inB(c.game.bairros[v.bairro].name)}") { Camara.promise(s, v) }
+                if (s.governs) {
+                    Btn("Emenda ${Fmt.money(Camara.emendaCost(s))}", icon = Icons.Rounded.Payments, enabled = v.funded != billKey) {
+                        c.act("Emenda liberada para o reduto") { Camara.fund(s, v, billKey) }
+                    }
+                    Btn("Dar cargo", icon = Icons.Rounded.Badge, enabled = !v.hasCargo) { c.act("Cargo para indicado de ${v.name}") { Camara.cargo(s, v) } }
+                    Btn("Prometer obra", icon = Icons.Rounded.Construction, enabled = v.promised < c.game.day - 365) {
+                        c.act("Obra prometida ${Fmt.inB(c.game.bairros[v.bairro].name)}") { Camara.promise(s, v) }
+                    }
+                } else {
+                    Btn("Trocar voto", icon = Icons.Rounded.Handshake, enabled = v.funded != billKey) { c.act("Acordo com ${v.name}") { com.dmwnezes.palanque.sim.Legislativo.trade(s, v, billKey) } }
                 }
             }
-            Text("Conversar é de graça. Cargo custa ${Fmt.money(Camara.cargoCost(s))}/ano e pega mal na imprensa. Obra prometida não feita em 1 ano vira inimizade.",
+            Text(if (s.governs) "Conversar é de graça. Cargo custa ${Fmt.money(Camara.cargoCost(s))}/ano e pega mal na imprensa. Obra prometida não feita em 1 ano vira inimizade."
+                else "Conversar é de graça. Trocar voto custa 5 de capital político: você promete apoiar um projeto dele depois.",
                 style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 6.dp))
         }
     }
@@ -149,7 +154,9 @@ fun CamaraSheet(c: GameController) {
     val opp = g.camara.count { Camara.stance(it) < 0 }
     val bill = Camara.pending(s)
     val billKey = bill?.id ?: -(g.day / 30)
-    Tabbed(c, Tab.CAMARA, "Câmara Municipal", "${g.camara.size} vereadores · maioria com ${g.camara.size / 2 + 1}", listOf("Plenário", "Projetos", "Leis")) { sel ->
+    val members = g.camara.size + if (s.legislates) 1 else 0
+    val shown = if (g.camara.size > 80) 60 else g.camara.size
+    Tabbed(c, Tab.CAMARA, g.role.house, "$members ${g.role.members} · maioria com ${Camara.majority(s)}", listOf("Plenário", "Projetos", "Leis")) { sel ->
         when (sel) {
             0 -> {
                 Spacer(Modifier.height(6.dp))
@@ -159,11 +166,19 @@ fun CamaraSheet(c: GameController) {
                     Cell("Independentes", "${g.camara.size - base - opp}", Ink.muted)
                     Cell("Oposição", "$opp", Ink.coral)
                 }
-                Note("A relação melhora com aprovação alta, obras no reduto, secretários do partido do vereador e favores. Toque num vereador para negociar.")
-                for (v in g.camara.sortedByDescending { it.relation }) VereadorRow(c, v, billKey, open == v.id, { open = if (open == v.id) -1 else v.id })
+                Note(if (s.governs) "A relação melhora com aprovação alta, obras no reduto, secretários do partido do parlamentar e favores. Toque num nome para negociar."
+                    else "Base, independentes e oposição aqui são em relação a você. Afinidade de partido, capital político e acordos aproximam os colegas.")
+                for (v in g.camara.sortedByDescending { it.relation }.take(shown)) VereadorRow(c, v, billKey, open == v.id, { open = if (open == v.id) -1 else v.id })
+                if (shown < g.camara.size) Note("Mostrando os $shown mais próximos de ${g.camara.size}.")
             }
             1 -> {
                 Spacer(Modifier.height(6.dp))
+                if (s.legislates) {
+                    val eb = Camara.execBill(s)
+                    if (eb != null) ExecBillCard(c, eb)
+                    else Note("Nenhum projeto do governo em votação agora.")
+                    SectionTitle("Seu projeto")
+                }
                 if (bill == null) {
                     Btn("Enviar projeto de lei", Modifier.fillMaxWidth(), BtnKind.PRIMARY, Icons.Rounded.Add) { picking = true }
                     Note("Um projeto por vez. A votação acontece 30 dias depois do envio; até lá dá para negociar.")
@@ -185,12 +200,12 @@ fun CamaraSheet(c: GameController) {
                             if (cnt.maybe > 0) Box(Modifier.weight(cnt.maybe.toFloat()).height(8.dp).background(Ink.amber))
                             if (cnt.no > 0) Box(Modifier.weight(cnt.no.toFloat()).height(8.dp).background(Ink.coral))
                         }
-                        Text("Precisa de ${g.camara.size / 2 + 1} votos", style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 6.dp))
+                        Text("Precisa de ${Camara.majority(s)} votos", style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 6.dp))
                         Spacer(Modifier.height(8.dp))
                         Btn("Retirar o projeto", kind = BtnKind.GHOST) { Camara.withdraw(s); c.refresh() }
                     }
                     SectionTitle("Quem negociar")
-                    val list = g.camara.map { it to Camara.chance(s, it, law, bill.revoke) }.sortedBy { kotlin.math.abs(it.second - 0.5) }
+                    val list = g.camara.map { it to Camara.chance(s, it, law, bill.revoke) }.sortedBy { kotlin.math.abs(it.second - 0.5) }.take(40)
                     for ((v, p) in list) VereadorRow(c, v, billKey, open == v.id, { open = if (open == v.id) -1 else v.id }, p)
                 }
                 val done = g.bills.filter { it.status != "tramitando" }.takeLast(12).reversed()
@@ -239,7 +254,7 @@ private fun LawPicker(c: GameController, onDismiss: () -> Unit, onCreate: () -> 
         Spacer(Modifier.height(8.dp))
         Btn("Criar uma lei própria", Modifier.fillMaxWidth(), BtnKind.GHOST, Icons.Rounded.Edit) { onCreate() }
         Spacer(Modifier.height(8.dp))
-        val laws = Laws.READY.filter { it.id !in g.laws } + g.customLaws.filter { it.id !in g.laws }.map { Laws.fromCustom(it) }
+        val laws = Laws.forRole(g.role).filter { it.id !in g.laws } + g.customLaws.filter { it.id !in g.laws }.map { Laws.fromCustom(it, g.level) }
         Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
             for (l in laws) {
                 val cnt = Camara.count(s, l, false)
@@ -303,7 +318,7 @@ private fun LawEditor(c: GameController, onDone: () -> Unit) {
             Segmented(listOf(0, 1), funding, { if (it == 0) "A prefeitura" else "Nova taxa" }) { funding = it }
             Spacer(Modifier.height(6.dp))
             SliderRow(Icons.Rounded.Balance, "Viés", ideo, -1f..1f, if (ideo < -0.3f) "Esquerda" else if (ideo > 0.3f) "Direita" else "Centro") { ideo = it }
-            val preview = Laws.fromCustom(CustomLaw("preview", name.ifBlank { "Lei" }, area, intensity, ideo, funding))
+            val preview = Laws.fromCustom(CustomLaw("preview", name.ifBlank { "Lei" }, area, intensity, ideo, funding), g.level)
             val cnt = Camara.count(s, preview, false)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 for (ch in lawChips(s, preview)) EffectChip(ch.text, ch.good)
@@ -317,5 +332,39 @@ private fun LawEditor(c: GameController, onDone: () -> Unit) {
                 onDone()
             }
         }
+    }
+}
+
+
+/** Projeto do governo em votação: você escolhe o voto. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ExecBillCard(c: GameController, b: com.dmwnezes.palanque.sim.Bill) {
+    val s = c.sim
+    val g = c.game
+    val law = Laws.def(g, b.law)
+    val cnt = Camara.count(s, b)
+    val orient = com.dmwnezes.palanque.sim.Legislativo.orientation(s, law, b.revoke)
+    Column(Modifier.fillMaxWidth().clip(Shapes.tile).background(Ink.raised).padding(14.dp)) {
+        Text("Projeto do ${s.execTitle}", style = Type.small, color = Ink.muted)
+        Text(law.name, style = Type.heading, color = Ink.text)
+        Text(law.desc, style = Type.small, color = Ink.muted)
+        Spacer(Modifier.height(6.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (ch in lawChips(s, law)) EffectChip(ch.text, ch.good)
+        }
+        Spacer(Modifier.height(10.dp))
+        LineItem("Seu partido orienta", if (orient > 0) "Sim" else "Não", if (orient > 0) Ink.good else Ink.coral)
+        LineItem("O eleitor", if (law.aprov > 0.5) "gosta" else if (law.aprov < -0.5) "não gosta" else "não liga", if (law.aprov > 0.5) Ink.good else if (law.aprov < -0.5) Ink.coral else Ink.muted)
+        LineItem("Placar previsto", "${cnt.yes} sim · ${cnt.no} não · ${cnt.maybe} indecisos", sub = "votação em ${b.voteDay - g.day} dias")
+        Spacer(Modifier.height(8.dp))
+        Segmented(listOf(1, 0, -1), b.playerVote, { when (it) { 1 -> "Sim"; -1 -> "Não"; else -> "Abster" } }) {
+            com.dmwnezes.palanque.sim.Legislativo.vote(s, b, it); c.refresh()
+        }
+        Text(when {
+            g.stance == 1 -> "Você é da base: votar contra o governo desgasta a relação."
+            g.stance == -1 -> "Você é da oposição: apoiar o governo confunde o seu eleitor."
+            else -> "Independente: vote pelo que o seu eleitor e o seu partido pensam."
+        }, style = Type.small, color = Ink.faint, modifier = Modifier.padding(top = 6.dp))
     }
 }

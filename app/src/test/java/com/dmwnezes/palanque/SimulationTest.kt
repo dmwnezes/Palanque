@@ -24,9 +24,53 @@ object TestBr {
     const val HORIZONTE = 2305233
     const val FORTALEZA = 2304400
 
-    fun newSim(city: Int = HORIZONTE, seed: Long = 7): Sim {
-        val g = Setup.newGame(br, Settings(seed = seed), city, Politician("Daniel Menezes", "psd"), Content.PARTIES)
+    fun newSim(city: Int = HORIZONTE, seed: Long = 7, role: com.dmwnezes.palanque.sim.Role = com.dmwnezes.palanque.sim.Role.PREFEITO): Sim {
+        val g = Setup.newGame(br, Settings(seed = seed), city, Politician("Daniel Menezes", "psd"), Content.PARTIES, role = role)
         return Sim(br, g)
+    }
+
+    /**
+     * Joga sozinho: resolve eventos com a 1ª opção, faz campanha, constrói, manda emendas e vota.
+     * pick escolhe o cargo nas eleições; gap decide o que fazer fora do cargo. Devolve o Sim final (pode ter trocado de jurisdição).
+     */
+    fun autoplay(start: Sim, days: Int, log: MutableList<String> = mutableListOf(), pick: (Sim, List<com.dmwnezes.palanque.sim.Role>) -> com.dmwnezes.palanque.sim.Role?): Sim {
+        var s = start
+        var day = 0
+        while (s.game.gameOver == null && day < days) {
+            val g = s.game
+            s.advanceDay(); day++
+            s.switchTo?.let { ng -> log += "troca para ${ng.level} (${ng.running})"; s = Sim(br, ng) }
+            val gg = s.game
+            while (gg.events.isNotEmpty()) Events.resolve(s, 0)
+            if (gg.candidacyPending) { val r = pick(s, Elections.options(s)); log += "${s.date.year}: disputa $r"; Elections.declare(s, r); continue }
+            if (gg.gapPending) { log += "${s.date.year}: fora do cargo"; Elections.waitUntil(s, Elections.nextElections(s).first()); continue }
+            gg.election?.let { e ->
+                e.seen = true
+                if (!e.conventionDone) Elections.confirmConvention(s, 0, Elections.coalitionOptions(s).filter { it.second }.take(2).map { it.first.id })
+                while (e.debate > 0) Elections.answerDebate(s, 0)
+                if (!e.finished && e.fund > Elections.adCost(s)) Elections.advertise(s)
+                if (!e.finished && e.phase == 1) for (b in gg.bairros.indices.take(6)) Elections.rally(s, b)
+                if (e.finished && e.round >= 1 && day % 30 == 0) Unit
+            }
+            if (s.governs && day % 60 == 0 && gg.cash > s.budget().revenue * 0.15) {
+                val t = s.obras[(day / 60) % s.obras.size]
+                s.build(t.id, (day / 60) % gg.bairros.size)
+            }
+            if (s.governs) {
+                if (gg.late) s.borrow(s.borrowLimit)
+                for (a in com.dmwnezes.palanque.sim.Area.entries) if (gg.secretarios[a.ordinal] == null) gg.pool.firstOrNull { it.area == a }?.let { s.hire(it.id) }
+            }
+            if (s.legislates) {
+                com.dmwnezes.palanque.sim.Camara.execBill(s)?.let { com.dmwnezes.palanque.sim.Legislativo.vote(s, it, 1) }
+                if (gg.emendasLeft > 0 && day % 45 == 0) {
+                    val unit = gg.bairros.indices.maxBy { gg.bairros[it].popShare }
+                    com.dmwnezes.palanque.sim.Legislativo.sendEmenda(s, unit, com.dmwnezes.palanque.sim.Area.SAUDE, gg.emendasLeft / 3)
+                }
+                com.dmwnezes.palanque.sim.Legislativo.speech(s)
+            }
+            check(!(gg.approval.isNaN() || gg.cash.isNaN() || gg.ind.any { it.isNaN() })) { "NaN em ${s.place.name} dia $day" }
+        }
+        return s
     }
 }
 
@@ -71,27 +115,11 @@ class SimulationTest {
             val s = TestBr.newSim(city)
             val g = s.game
             for (a in Area.entries) g.pool.firstOrNull { it.area == a }?.let { s.hire(it.id) }
-            var day = 0
-            while (g.gameOver == null && day < 3000) {
-                s.advanceDay(); day++
-                while (g.events.isNotEmpty()) Events.resolve(s, 0)
-                g.election?.let { e ->
-                    e.seen = true
-                    if (!e.conventionDone) Elections.confirmConvention(s, 0, Elections.coalitionOptions(s).filter { it.second }.take(2).map { it.first.id })
-                    while (e.debate > 0) Elections.answerDebate(s, 0)
-                    if (!e.finished && e.fund > Elections.adCost(s)) Elections.advertise(s)
-                }
-                if (day % 60 == 0 && g.cash > s.budget().revenue * 0.15) {
-                    val t = Content.OBRAS[(day / 60) % Content.OBRAS.size]
-                    s.build(t.id, (day / 60) % g.bairros.size)
-                }
-                if (g.late) s.borrow(s.borrowLimit)
-                assertFalse("NaN em ${s.city.name} dia $day", g.approval.isNaN() || g.cash.isNaN() || g.ind.any { it.isNaN() })
-            }
-            assertNotNull("${s.city.name}: jogo deveria acabar", g.gameOver)
-            assertTrue(g.history.size > 40)
+            val log = mutableListOf<String>()
+            // sempre tenta a reeleição para prefeito; depois do 2º mandato, para de vez
+            val end = TestBr.autoplay(s, 2900, log) { sim, opts -> com.dmwnezes.palanque.sim.Role.PREFEITO.takeIf { it in opts && sim.game.role == it } }
             assertTrue("${s.city.name}: obras", g.obras.count { it.done } > 3)
-            println("${s.city.name}: ${g.gameOver!!.title} · mandatos ${g.termNumber} · aprovação ${g.approval.toInt()} · caixa ${g.cash.toLong()} · dívida ${g.debt.toLong()}")
+            println("${s.city.name}: ${end.game.role.label} · no cargo ${end.game.inOffice} · mandatos ${g.termNumber} · aprovação ${g.approval.toInt()} · ${log.joinToString("; ")}")
         }
     }
 
@@ -118,10 +146,47 @@ class SimulationTest {
         assertTrue(g.bills.last().status != "tramitando")
     }
 
+    /** Carreira: vereador → prefeito (mesma cidade) e prefeito → governador (troca para o estado). */
+    @Test fun career() {
+        val v = TestBr.newSim(role = com.dmwnezes.palanque.sim.Role.VEREADOR)
+        assertTrue(v.legislates && v.game.emendasLeft > 0 && v.game.execName.isNotEmpty())
+        val log = mutableListOf<String>()
+        var s = TestBr.autoplay(v, 365 * 4 + 10, log) { _, opts -> com.dmwnezes.palanque.sim.Role.PREFEITO.takeIf { it in opts } }
+        println("vereador: " + log.joinToString("; ") + " → ${s.game.role.label}, no cargo ${s.game.inOffice}, apoio ${s.game.approval.toInt()}")
+        assertTrue(log.any { it.contains("disputa PREFEITO") })
+        // governador do Ceará, 8 anos
+        val gov = TestBr.newSim(role = com.dmwnezes.palanque.sim.Role.GOVERNADOR)
+        assertEquals(com.dmwnezes.palanque.sim.Level.ESTADO, gov.level)
+        assertEquals(184, gov.game.bairros.size)
+        assertEquals(46, gov.game.camara.size) // Assembleia do Ceará
+        assertTrue("prefeitos", gov.game.bairros.all { it.mayorParty.isNotEmpty() })
+        val b = gov.budget()
+        assertTrue("receita do estado ${b.revenue}", b.revenue in 2e10..8e10)
+        val log2 = mutableListOf<String>()
+        s = TestBr.autoplay(gov, 365 * 8, log2) { sim, opts -> com.dmwnezes.palanque.sim.Role.GOVERNADOR.takeIf { it in opts && sim.governs } ?: com.dmwnezes.palanque.sim.Role.DEP_FEDERAL.takeIf { it in opts } }
+        println("governador: " + log2.joinToString("; ") + " → ${s.game.role.label}, aprovação ${s.game.approval.toInt()}, obras ${s.game.obras.count { it.done }}")
+        // deputado federal: casa de 513, eleição proporcional
+        val dep = TestBr.newSim(role = com.dmwnezes.palanque.sim.Role.DEP_FEDERAL)
+        assertEquals(513, dep.game.camara.size)
+        val log3 = mutableListOf<String>()
+        s = TestBr.autoplay(dep, 365 * 4 + 10, log3) { _, opts -> com.dmwnezes.palanque.sim.Role.DEP_FEDERAL.takeIf { it in opts } }
+        println("deputado federal: " + log3.joinToString("; ") + " → no cargo ${s.game.inOffice}")
+        // prefeito que larga a prefeitura em 2030 para disputar o governo
+        val p = TestBr.newSim()
+        val log4 = mutableListOf<String>()
+        s = TestBr.autoplay(p, 365 * 2 + 210, log4) { _, opts -> com.dmwnezes.palanque.sim.Role.GOVERNADOR.takeIf { it in opts } }
+        assertTrue(log4.joinToString(), log4.any { it.contains("troca para ESTADO") })
+        assertEquals(com.dmwnezes.palanque.sim.Level.ESTADO, s.game.level)
+        println("prefeito → governador: " + log4.joinToString("; ") + " → ${s.game.role.label}, no cargo ${s.game.inOffice}")
+    }
+
     @Test fun campaign() {
         val s = TestBr.newSim()
         val g = s.game
-        while (g.election == null) { s.advanceDay(); g.events.clear() }
+        while (g.election == null) {
+            s.advanceDay(); g.events.clear()
+            if (g.candidacyPending) Elections.declare(s, if (Elections.isMunicipal(s.date.year)) com.dmwnezes.palanque.sim.Role.PREFEITO else null)
+        }
         val e = g.election!!
         assertEquals(0, e.phase)
         assertEquals(3, e.viceOptions.size)

@@ -59,7 +59,7 @@ import com.dmwnezes.palanque.sim.Fmt
 import kotlin.math.ln
 
 @Composable
-fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: (String) -> Unit) {
+fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: (String) -> Unit, onSwitch: (com.dmwnezes.palanque.sim.Game) -> Unit = {}) {
     var frame by remember { mutableLongStateOf(0L) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     remember(c) { c.feedback = Feedback(ctx); 0 }
@@ -70,6 +70,8 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
             if (last != 0L) c.onFrame((t - last) / 1e9, System.currentTimeMillis())
             last = t
             frame = c.tick
+            // candidatura em outro nível: o jogo troca de jurisdição
+            c.sim.switchTo?.let { ng -> c.sim.switchTo = null; onSwitch(ng) }
         }
     }
 
@@ -92,7 +94,9 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
         val b = g.bairros[i]
         when (c.layer) {
             // contraste reforçado: 30% já é vermelho forte, 70% verde forte
-            Layer.APROVACAO -> BairroPaint(Ink.heat((50 + (b.approval - 50) * 2.5).toFloat()).copy(alpha = 0.8f), "${b.approval.toInt()}%")
+            Layer.APROVACAO -> if (sim.governs) BairroPaint(Ink.heat((50 + (b.approval - 50) * 2.5).toFloat()).copy(alpha = 0.8f), "${b.approval.toInt()}%")
+            // fora do governo, o mapa mostra o seu apoio (uma escala menor: 35% já é muito)
+            else BairroPaint(Ink.heat((b.approval * 1.6).toFloat()).copy(alpha = 0.8f), "${b.approval.toInt()}%")
             Layer.POPULACAO -> {
                 val d = (b.popShare / sim.plan.bairros[i].areaKm2) / maxDens
                 val t = (1 + ln(d.coerceAtLeast(0.001)) / 6.9).coerceIn(0.05, 1.0).toFloat()
@@ -106,7 +110,8 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
                 val e = g.election
                 val res = e?.result?.getOrNull(i)
                 val intent = e?.pollBairro?.getOrNull(i)
-                if (res == null && intent != null) BairroPaint(Ink.heat((intent * 200).toFloat()).copy(alpha = 0.8f), Fmt.pct(intent))
+                if (e?.proportional == true) BairroPaint(Ink.heat((b.approval * 1.6).toFloat()).copy(alpha = 0.8f), "${b.approval.toInt()}%")
+                else if (res == null && intent != null) BairroPaint(Ink.heat((intent * 200).toFloat()).copy(alpha = 0.8f), Fmt.pct(intent))
                 else if (res == null) BairroPaint(Ink.land, null) else {
                     val pl = e.candidates.indexOfFirst { it.player }
                     val mine = res[pl]
@@ -156,6 +161,8 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
                             Tab.GOVERNO -> GovernoSheet(c)
                             Tab.OBRAS -> ObrasSheet(c)
                             Tab.CAMARA -> CamaraSheet(c)
+                            Tab.EMENDAS -> EmendasSheet(c)
+                            Tab.MANDATO -> MandatoSheet(c)
                             Tab.EQUIPE -> EquipeSheet(c)
                             Tab.CIDADE -> CidadeSheet(c)
                             Tab.CARREIRA -> CarreiraSheet(c)
@@ -169,6 +176,8 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
 
         g.events.firstOrNull()?.let { EventCard(c) }
         if (g.events.isEmpty() && c.electionPending) ElectionCard(c)
+        if (g.events.isEmpty() && g.candidacyPending) CandidacyCard(c)
+        if (g.gapPending) GapCard(c)
         g.election?.let { e ->
             if (g.events.isEmpty() && !e.conventionDone) ConventionCard(c)
             else if (g.events.isEmpty() && e.debate > 0) DebateCard(c)
@@ -206,8 +215,8 @@ private fun TopBar(c: GameController) {
     Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).clip(Shapes.chip).clickable { c.openTab(Tab.CIDADE) }.padding(4.dp)) {
-                Text(c.sim.city.name, style = Type.heading.copy(fontSize = 18.sp, fontWeight = FontWeight.ExtraBold), color = Ink.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${Fmt.date(d)} · ${c.sim.city.sigla}", style = Type.small.copy(fontFeatureSettings = "tnum"), color = Ink.muted)
+                Text(c.sim.place.name, style = Type.heading.copy(fontSize = 18.sp, fontWeight = FontWeight.ExtraBold), color = Ink.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${Fmt.date(d)} · ${if (g.inOffice) g.role.label else "sem mandato"}", style = Type.small.copy(fontFeatureSettings = "tnum"), color = Ink.muted, maxLines = 1)
             }
             SpeedControl(c)
             Spacer(Modifier.width(8.dp))
@@ -215,14 +224,21 @@ private fun TopBar(c: GameController) {
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val low = g.cash < c.sim.budget().revenue * 0.02
-            StatPill(Icons.Rounded.Payments, Fmt.money(g.cash), if (g.cash < 0) Ink.coral else if (low) Ink.amber else Ink.text) { c.subTab[Tab.GOVERNO] = 0; c.openTab(Tab.GOVERNO) }
-            StatPill(Icons.Rounded.ThumbUp, "${g.approval.toInt()}%", Ink.scale(g.approval.toFloat())) { c.subTab[Tab.CIDADE] = 0; c.openTab(Tab.CIDADE) }
-            StatPill(Icons.Rounded.Groups, Fmt.people(g.pop), Ink.text) { c.subTab[Tab.CIDADE] = 1; c.openTab(Tab.CIDADE) }
+            if (c.sim.governs) {
+                val low = g.cash < c.sim.budget().revenue * 0.02
+                StatPill(Icons.Rounded.Payments, Fmt.money(g.cash), if (g.cash < 0) Ink.coral else if (low) Ink.amber else Ink.text) { c.subTab[Tab.GOVERNO] = 0; c.openTab(Tab.GOVERNO) }
+                StatPill(Icons.Rounded.ThumbUp, "${g.approval.toInt()}%", Ink.scale(g.approval.toFloat())) { c.subTab[Tab.CIDADE] = 0; c.openTab(Tab.CIDADE) }
+                StatPill(Icons.Rounded.Groups, Fmt.people(g.pop), Ink.text) { c.subTab[Tab.CIDADE] = 1; c.openTab(Tab.CIDADE) }
+            } else {
+                if (c.sim.legislates) StatPill(Icons.Rounded.Payments, Fmt.money(g.emendasLeft), Ink.text) { c.openTab(Tab.EMENDAS) }
+                StatPill(Icons.Rounded.ThumbUp, "apoio ${g.approval.toInt()}%", Ink.scale(g.approval.toFloat() * 1.4f)) { c.subTab[Tab.CIDADE] = 1; c.openTab(Tab.CIDADE) }
+                StatPill(Icons.Rounded.Bolt, "${g.career.capital.toInt()}", Ink.gold) { if (c.sim.legislates) c.openTab(Tab.MANDATO) }
+            }
             g.election?.takeIf { !it.finished }?.let { e ->
                 val pl = e.candidates.indexOfFirst { it.player }
                 val last = e.polls.lastOrNull()
-                StatPill(Icons.Rounded.HowToVote, last?.let { Fmt.pct(it[pl]) } ?: "Campanha", Ink.gold) { c.openTab(Tab.CARREIRA) }
+                val label = if (e.proportional) last?.let { "${(it[0] * 100).toInt()}% do quociente" } else last?.let { Fmt.pct(it[pl]) }
+                StatPill(Icons.Rounded.HowToVote, label ?: "Campanha", Ink.gold) { c.subTab[Tab.CARREIRA] = 1; c.openTab(Tab.CARREIRA) }
             }
         }
     }
@@ -301,6 +317,8 @@ fun Dock(c: GameController, inSheet: Boolean = false) {
         Tab.GOVERNO to Icons.Rounded.AccountBalance,
         Tab.OBRAS to Icons.Rounded.Construction,
         Tab.CAMARA to Icons.Rounded.Gavel,
+        Tab.EMENDAS to Icons.Rounded.Payments,
+        Tab.MANDATO to Icons.Rounded.Campaign,
         Tab.EQUIPE to Icons.Rounded.Badge,
         Tab.CIDADE to Icons.Rounded.LocationCity,
         Tab.CARREIRA to Icons.Rounded.HowToVote,
@@ -310,25 +328,25 @@ fun Dock(c: GameController, inSheet: Boolean = false) {
             .navigationBarsPadding().padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-        for (t in Tab.entries) {
+        for (t in c.tabs) {
             val sel = c.tab == t
             val badge = when (t) {
                 Tab.EQUIPE -> c.game.secretarios.count { it == null }
-                Tab.CAMARA -> if (c.game.bills.any { it.status == "tramitando" }) 1 else 0
+                Tab.CAMARA -> if (c.game.bills.any { it.status == "tramitando" && (it.author == "player" || it.playerVote == 0) }) 1 else 0
                 Tab.CARREIRA -> if (c.game.election?.let { !it.finished } == true) 1 else 0
                 else -> 0
             }
             Column(Modifier.weight(1f).clip(Shapes.tile).clickable { c.openTab(t) }.padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box {
                     Box(Modifier.size(width = 52.dp, height = 30.dp).clip(Shapes.chip).background(if (sel) Ink.gold else Color.Transparent), contentAlignment = Alignment.Center) {
-                        Icon(icons[t]!!, t.label, tint = if (sel) Ink.onGold else Ink.muted, modifier = Modifier.size(22.dp))
+                        Icon(icons[t]!!, c.tabLabel(t), tint = if (sel) Ink.onGold else Ink.muted, modifier = Modifier.size(22.dp))
                     }
                     if (badge > 0) Box(
                         Modifier.align(Alignment.TopEnd).size(16.dp).clip(CircleShape).background(Ink.coral), contentAlignment = Alignment.Center,
                     ) { Text("$badge", style = Type.small.copy(fontSize = 10.sp), color = Color.White) }
                 }
                 Spacer(Modifier.height(3.dp))
-                Text(t.label, style = Type.small.copy(fontSize = 11.sp), color = if (sel) Ink.text else Ink.muted, maxLines = 1)
+                Text(c.tabLabel(t), style = Type.small.copy(fontSize = 11.sp), color = if (sel) Ink.text else Ink.muted, maxLines = 1)
             }
         }
     }
@@ -348,14 +366,25 @@ private fun BairroCard(c: GameController, b: Int) {
             Column(Modifier.weight(1f)) {
                 Text(bs.name, style = Type.heading, color = Ink.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("Preocupação: ${bs.need.label.lowercase()}", style = Type.small, color = Ink.muted)
+                if (bs.mayorName.isNotEmpty()) {
+                    val mp = c.sim.partyOf(bs.mayorParty)
+                    val rel = if (bs.mayorParty == g.player.party) "do seu partido" else if (c.sim.governs) (if (bs.mayorRel > 20) "aliado" else if (bs.mayorRel < -20) "oposição" else "neutro") else ""
+                    Text("Prefeito(a): ${bs.mayorName} (${mp.sigla})" + if (rel.isNotEmpty()) " · $rel" else "", style = Type.small, color = Ink.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
             IconBtn(Icons.Rounded.Close, size = 32.dp) { c.select(-1) }
         }
         Spacer(Modifier.height(10.dp))
         Row {
-            Cell("Aprovação", "${bs.approval.toInt()}%", Ink.scale(bs.approval.toFloat()))
-            Cell("Moradores", Fmt.people(g.pop * bs.popShare))
-            Cell("Serviços aqui", Fmt.signed(parts.local), if (parts.local > 0.5) Ink.good else Ink.muted)
+            if (c.sim.governs) {
+                Cell("Aprovação", "${bs.approval.toInt()}%", Ink.scale(bs.approval.toFloat()))
+                Cell("Moradores", Fmt.people(g.pop * bs.popShare))
+                Cell("Serviços aqui", Fmt.signed(parts.local), if (parts.local > 0.5) Ink.good else Ink.muted)
+            } else {
+                Cell("Seu apoio", "${bs.approval.toInt()}%", Ink.scale(bs.approval.toFloat() * 1.4f))
+                Cell("Moradores", Fmt.people(g.pop * bs.popShare))
+                Cell("Emendas", Fmt.signed(bs.local), if (bs.local > 0.5) Ink.good else Ink.muted)
+            }
         }
         val here = g.obras.filter { it.bairro == b }
         if (here.isNotEmpty()) {
@@ -369,8 +398,11 @@ private fun BairroCard(c: GameController, b: Int) {
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Btn("Construir aqui", Modifier.weight(1f), BtnKind.PRIMARY, Icons.Rounded.Construction) {
+            if (c.sim.governs) Btn("Construir aqui", Modifier.weight(1f), BtnKind.PRIMARY, Icons.Rounded.Construction) {
                 c.buildTarget = b; c.subTab[Tab.OBRAS] = 0; c.openTab(Tab.OBRAS)
+            }
+            if (c.sim.legislates) Btn("Emenda aqui", Modifier.weight(1f), BtnKind.PRIMARY, Icons.Rounded.Payments) {
+                c.emendaTarget = b; c.openTab(Tab.EMENDAS)
             }
             val e = g.election
             if (e != null && !e.finished) Btn("Comício", Modifier.weight(1f), icon = Icons.Rounded.Campaign) {
@@ -390,7 +422,7 @@ private fun PlacingBanner(c: GameController, type: String) {
         Icon(GameIcons.of(t.icon), null, tint = Ink.gold, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text("Toque no bairro", style = Type.heading.copy(fontSize = 16.sp), color = Ink.text)
+            Text("Toque no ${c.sim.unitName}", style = Type.heading.copy(fontSize = 16.sp), color = Ink.text)
             Text("${t.name} · ${Fmt.money(c.sim.obraCost(t))}", style = Type.small, color = Ink.muted)
         }
         Btn("Cancelar", kind = BtnKind.GHOST) { c.placing = null; c.refresh() }
@@ -427,7 +459,7 @@ private fun EventCard(c: GameController) {
                             for (ch in chips) EffectChip(ch.text, ch.good)
                         }
                     }
-                    if (!ok) Text("Precisa de um distrito industrial pronto", style = Type.small, color = Ink.coral)
+                    if (!ok) Text("Ainda não dá: falta o que a opção pede", style = Type.small, color = Ink.coral)
                 }
             }
         }
@@ -446,8 +478,21 @@ private fun ElectionCard(c: GameController) {
         }
         Icon(Icons.Rounded.HowToVote, null, tint = if (e.finished && !e.won) Ink.coral else Ink.gold, modifier = Modifier.size(44.dp).align(Alignment.CenterHorizontally))
         Text(title, style = Type.title, color = Ink.text, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp))
-        Text(if (e.round == 2) "Resultado do 2º turno" else "Resultado do 1º turno", style = Type.label, color = Ink.muted, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(if (e.proportional) "Eleição para ${e.office.label.lowercase()}" else if (e.round == 2) "Resultado do 2º turno" else "Resultado do 1º turno",
+            style = Type.label, color = Ink.muted, modifier = Modifier.align(Alignment.CenterHorizontally))
         Spacer(Modifier.height(14.dp))
+        if (e.proportional) {
+            val (v, q) = e.totals
+            Row {
+                Cell("Seus votos", Fmt.people(v), Ink.gold)
+                Cell("Quociente", Fmt.people(q))
+                Cell("Do quociente", Fmt.pct(v / q))
+            }
+            Text("Precisa de 70% do quociente — ou 40%, se o partido for grande e puxar votos de legenda.", style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 10.dp))
+            Spacer(Modifier.height(14.dp))
+            Btn("Ver os votos por região", Modifier.fillMaxWidth(), BtnKind.PRIMARY) { e.seen = true; c.layer = Layer.VOTOS; c.refresh() }
+            return@Overlay
+        }
         val rows = if (e.round == 2) listOf(pl, e.rival2).map { it to e.runoff[it] } else e.candidates.indices.map { it to e.totals[it] }
         for ((i, v) in rows.sortedByDescending { it.second }) {
             val cand = e.candidates[i]
@@ -465,8 +510,8 @@ private fun ElectionCard(c: GameController) {
         Spacer(Modifier.height(10.dp))
         Text(
             when {
-                e.finished && e.won -> "Mais quatro anos. O segundo mandato começa em 1º de janeiro."
-                e.finished -> "Você governa até 31 de dezembro."
+                e.finished && e.won -> if (c.game.inOffice && c.game.role == e.office) "Mais quatro anos. O novo mandato começa em 1º de janeiro." else "A posse é em 1º de janeiro."
+                e.finished -> if (c.game.inOffice) "Você fica no cargo até 31 de dezembro." else "A carreira segue: dá para tentar de novo na próxima eleição."
                 else -> "Mais quatro semanas de campanha contra ${e.candidates[e.rival2].name}."
             },
             style = Type.body, color = Ink.muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),

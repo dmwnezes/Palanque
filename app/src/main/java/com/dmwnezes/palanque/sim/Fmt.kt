@@ -45,14 +45,20 @@ object Fmt {
     private val FEMININE = listOf("Vila", "Cidade", "Morada", "Lagoa", "Pedra", "Água", "Nova", "Santa", "Nossa", "Zona", "Barra", "Alvorada", "Aurora", "Boa", "Bela")
     private fun fem(bairro: String) = FEMININE.any { bairro.startsWith(it) }
 
-    /** "no Centro" · "na Vila Nova" */
-    fun inB(bairro: String) = (if (fem(bairro)) "na " else "no ") + bairro
+    /**
+     * Nomes de municípios do estado em jogo: vão sem artigo ("em Sobral").
+     * shortcut: alguns municípios levam artigo ("no Crato", "no Rio de Janeiro"); ajustar com uma lista se incomodar.
+     */
+    var plainNames: Set<String> = emptySet()
 
-    /** "o Centro" · "a Vila Nova" */
-    fun theB(bairro: String) = (if (fem(bairro)) "a " else "o ") + bairro
+    /** "no Centro" · "na Vila Nova" · "em Sobral" */
+    fun inB(bairro: String) = if (bairro in plainNames) "em $bairro" else (if (fem(bairro)) "na " else "no ") + bairro
 
-    /** "do Centro" · "da Vila Nova" */
-    fun ofB(bairro: String) = (if (fem(bairro)) "da " else "do ") + bairro
+    /** "o Centro" · "a Vila Nova" · "Sobral" */
+    fun theB(bairro: String) = if (bairro in plainNames) bairro else (if (fem(bairro)) "a " else "o ") + bairro
+
+    /** "do Centro" · "da Vila Nova" · "de Sobral" */
+    fun ofB(bairro: String) = if (bairro in plainNames) "de $bairro" else (if (fem(bairro)) "da " else "do ") + bairro
 
     /** "do Ceará" · "da Bahia" · "de São Paulo" */
     fun ofState(uf: Int, name: String) = when (uf) {

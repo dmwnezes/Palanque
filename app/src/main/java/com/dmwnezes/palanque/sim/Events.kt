@@ -21,9 +21,13 @@ class EventDef(
     val options: List<EventOption>,
     val weight: (Sim) -> Double = { 1.0 },
     val make: (Sim, Random) -> PendingEvent? = { s, _ -> PendingEvent("", s.game.day) },
+    /** só para cidades ou só para estados (null = os dois) */
+    val level: Level? = null,
+    /** 0 = decisões de quem governa, 1 = de parlamentar */
+    val who: Int = 0,
 )
 
-/** Acontecimentos que pedem uma decisão do prefeito. */
+/** Acontecimentos que pedem uma decisão de quem governa — ou do parlamentar. */
 object Events {
     private fun money(v: Double, good: Boolean = false) = Chip((if (good) "+" else "−") + Fmt.money(v).removePrefix("−"), good)
     private fun aprov(v: Double, where: String = "") = Chip("${Fmt.signed(v)} aprovação$where", v >= 0)
@@ -124,7 +128,7 @@ object Events {
             ),
         ),
         EventDef(
-            "buraco", "camera", null,
+            "buraco", "camera", null, level = Level.CIDADE,
             title = { s, e -> "Vídeo de cratera ${Fmt.inB(s.bname(e))} viraliza" },
             text = { _, _ -> "Um carro caiu num buraco e o vídeo já passa de um milhão de visualizações." },
             make = { s, r -> PendingEvent("buraco", s.game.day, bairro = pickBairro(s, r), amount = scaled(s, 0.8, 50_000.0, 6e6)) },
@@ -135,7 +139,7 @@ object Events {
             ),
         ),
         EventDef(
-            "convenio", "handshake", null,
+            "convenio", "handshake", null, level = Level.CIDADE,
             title = { s, _ -> "Governo ${Fmt.ofState(s.state.code, s.state.name)} oferece convênio" },
             text = { s, e -> "O estado paga 80% de ${Content.obra(e.text).name.lowercase()} ${Fmt.inB(s.bname(e))}. A prefeitura entra com o resto." },
             weight = { 0.7 },
@@ -150,7 +154,7 @@ object Events {
             ),
         ),
         EventDef(
-            "associacao", "people", null,
+            "associacao", "people", null, level = Level.CIDADE,
             title = { s, e -> "Moradores ${Fmt.ofB(s.bname(e))} cobram a prefeitura" },
             text = { s, e -> "A associação de moradores quer melhorias em ${s.game.bairros[e.bairro].need.label.lowercase()}." },
             make = { s, r -> PendingEvent("associacao", s.game.day, bairro = pickBairro(s, r)) },
@@ -211,7 +215,7 @@ object Events {
             ),
         ),
         EventDef(
-            "onibus", "bus", null,
+            "onibus", "bus", null, level = Level.CIDADE,
             title = { _, _ -> "Empresa de ônibus pede reajuste" },
             text = { _, _ -> "Sem aumento da tarifa, ela ameaça cortar linhas nos bairros mais distantes." },
             options = listOf(
@@ -223,7 +227,7 @@ object Events {
             ),
         ),
         EventDef(
-            "salario_camara", "gavel", null,
+            "salario_camara", "gavel", null, level = Level.CIDADE,
             title = { _, _ -> "Câmara aprova aumento para os vereadores" },
             text = { _, _ -> "O projeto chega para sanção. A população acompanha pelas redes." },
             weight = { 0.5 },
@@ -283,6 +287,82 @@ object Events {
             ),
         ),
         EventDef(
+            "greve_pm", "siren", Crisis.GREVE,
+            title = { _, _ -> "Policiais militares cruzam os braços" },
+            text = { _, _ -> "Sem reajuste há anos, a PM ameaça aquartelamento. Os comerciantes fecham as portas." },
+            level = Level.ESTADO, weight = { 0.5 },
+            options = listOf(
+                EventOption("Dar reajuste de 10%", { _, _ -> listOf(Chip("Segurança +10% no custo", false), area(Area.SEGURANCA, 2.0)) }) { s, _ ->
+                    s.game.wage[Area.SEGURANCA.ordinal] *= 1.10; s.bump(Area.SEGURANCA, 2.0)
+                },
+                EventOption("Pedir a Força Nacional", { _, _ -> listOf(aprov(-3.0), area(Area.SEGURANCA, -2.0)) }) { s, _ -> s.shift(-1, -3.0); s.bump(Area.SEGURANCA, -2.0) },
+            ),
+        ),
+        EventDef(
+            "rebeliao", "gavel", null,
+            title = { s, e -> "Rebelião no presídio ${Fmt.ofB(s.bname(e))}" },
+            text = { _, _ -> "Presos tomam um pavilhão e fazem reféns. As imagens estão em todos os jornais." },
+            level = Level.ESTADO, weight = { s -> if (s.coverage(Area.SEGURANCA) > s.game.pop * 0.3) 0.3 else 0.7 },
+            make = { s, r -> PendingEvent("rebeliao", s.game.day, bairro = pickBairro(s, r)) },
+            options = listOf(
+                EventOption("Negociar com calma", { _, _ -> listOf(aprov(-1.0)) }) { s, _ -> s.shift(-1, -1.0) },
+                EventOption("Mandar o choque", { _, _ -> listOf(Chip("Arriscado", false)) }) { s, e ->
+                    if (s.rng(55).nextDouble() < 0.6) { s.shift(-1, 2.0); s.news("check", "Rebelião contida sem mortes", 1, e.bairro) }
+                    else { s.shift(-1, -6.0); s.news("alert", "Ação da polícia termina com mortos", 3, e.bairro) }
+                },
+            ),
+        ),
+        EventDef(
+            "prefeito_pede", "handshake", null,
+            title = { s, e -> "Prefeito ${Fmt.ofB(s.bname(e))} pede verba" },
+            text = { s, e -> "${s.game.bairros[e.bairro].mayorName} (${s.partyOf(s.game.bairros[e.bairro].mayorParty).sigla}) quer ${Fmt.money(e.amount)} para uma obra na cidade." },
+            level = Level.ESTADO, weight = { 0.0 },
+            options = listOf(
+                EventOption("Mandar o dinheiro", { _, e -> listOf(money(e.amount), Chip("Prefeito +25", true), aprov(3.0, " na cidade")) }) { s, e ->
+                    s.pay(e.amount); s.game.bairros[e.bairro].mayorRel += 25; s.shift(e.bairro, 3.0)
+                },
+                EventOption("Dizer que não há verba", { _, _ -> listOf(Chip("Prefeito −10", false)) }) { s, e -> s.game.bairros[e.bairro].mayorRel -= 10 },
+            ),
+        ),
+        EventDef(
+            "lobby", "money", Crisis.ESCANDALO,
+            title = { _, _ -> "Empresário oferece ajuda na campanha" },
+            text = { _, _ -> "Em troca, ele quer seu voto num projeto que interessa à empresa dele." },
+            who = 1, weight = { 0.6 },
+            options = listOf(
+                EventOption("Aceitar", { _, _ -> listOf(Chip("Capital +6", true), Chip("Risco de escândalo", false)) }) { s, _ ->
+                    s.game.career.capital += 6
+                    if (s.rng(66).nextDouble() < 0.35) { s.shift(-1, -8.0); s.news("scandal", "Imprensa revela acordo seu com empresário", 3) }
+                },
+                EventOption("Recusar", { _, _ -> emptyList() }) { _, _ -> },
+            ),
+        ),
+        EventDef(
+            "entrevista", "speech", null,
+            title = { _, _ -> "Programa de TV quer entrevistar você" },
+            text = { s, _ -> "O assunto: o governo de ${s.game.execName} (${s.partyOf(s.game.execParty).sigla})." },
+            who = 1,
+            options = listOf(
+                EventOption("Elogiar o governo", { s, _ -> listOf(Chip("Governo +10", true), aprov(if (s.game.execApproval >= 50) 1.0 else -1.0)) }) { s, _ ->
+                    s.game.execRel += 10; s.shift(-1, if (s.game.execApproval >= 50) 1.0 else -1.0)
+                },
+                EventOption("Criticar o governo", { s, _ -> listOf(Chip("Governo −10", false), aprov(if (s.game.execApproval < 50) 2.0 else -1.0)) }) { s, _ ->
+                    s.game.execRel -= 10; s.shift(-1, if (s.game.execApproval < 50) 2.0 else -1.0)
+                },
+                EventOption("Não ir", { _, _ -> emptyList() }) { _, _ -> },
+            ),
+        ),
+        EventDef(
+            "convite_base", "handshake", null,
+            title = { s, _ -> "O ${s.execTitle} convida você para a base" },
+            text = { _, _ -> "Na base, suas emendas saem inteiras — mas você divide o desgaste do governo." },
+            who = 1, weight = { s -> if (s.game.stance == 1) 0.0 else 0.5 },
+            options = listOf(
+                EventOption("Entrar na base", { _, _ -> listOf(Chip("Emendas pagas 100%", true)) }) { s, _ -> Legislativo.setStance(s, 1) },
+                EventOption("Recusar", { _, _ -> listOf(Chip("Governo −5", false)) }) { s, _ -> s.game.execRel -= 5 },
+            ),
+        ),
+        EventDef(
             "assaltos", "siren", null,
             title = { s, e -> "Onda de assaltos ${Fmt.inB(s.bname(e))}" },
             text = { _, _ -> "Comerciantes fecham mais cedo e pedem policiamento." },
@@ -296,7 +376,7 @@ object Events {
             ),
         ),
         EventDef(
-            "emenda", "money", null,
+            "emenda", "money", null, level = Level.CIDADE,
             title = { _, _ -> "Deputado oferece emenda parlamentar" },
             text = { _, e -> "Um deputado federal quer mandar ${Fmt.money(e.amount)} para a cidade. Em troca, espera seu apoio em 2030." },
             weight = { 0.6 },
@@ -331,7 +411,8 @@ object Events {
 
     fun spawn(s: Sim) {
         val r = s.rng(77)
-        val pool = ALL.filter { (it.crisis == null || it.crisis in s.game.settings.crises) }
+        val who = if (s.governs) 0 else 1
+        val pool = ALL.filter { (it.crisis == null || it.crisis in s.game.settings.crises) && it.who == who && (it.level == null || it.level == s.level) }
             .map { d -> d to (d.weight(s) * (if (d.key == "convenio") 1 + 0.5 * s.game.modifiers.count { it.key == "convenio" && it.until > s.game.day } else 1.0)) }
             .filter { it.second > 0 }
         if (pool.isEmpty()) return

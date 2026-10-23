@@ -85,7 +85,7 @@ private fun LimitRow(label: String, value: Double, ok: Boolean, rule: String, wa
 fun GovernoSheet(c: GameController) {
     val sim = c.sim
     val g = c.game
-    Tabbed(c, Tab.GOVERNO, "Governo", "Prefeitura de ${sim.city.name}", listOf("Orçamento", "Impostos", "Dívida")) { sel ->
+    Tabbed(c, Tab.GOVERNO, "Governo", sim.governmentName, listOf("Orçamento", "Impostos", "Dívida")) { sel ->
         val b = sim.budget()
         when (sel) {
             0 -> {
@@ -101,13 +101,13 @@ fun GovernoSheet(c: GameController) {
                 }
                 SectionTitle("Limites da lei")
                 val l = sim.limits()
-                LimitRow("Saúde", l.health, l.healthOk, "mín. 15%")
+                LimitRow("Saúde", l.health, l.healthOk, "mín. ${(l.healthFloor * 100).roundToInt()}%")
                 LimitRow("Educação", l.education, l.educationOk, "mín. 25%")
-                LimitRow("Pessoal (LRF)", l.personnel, l.personnelOk, "máx. 54%", l.personnelAlert)
+                LimitRow("Pessoal (LRF)", l.personnel, l.personnelOk, "máx. ${(l.personnelCap * 100).roundToInt()}%", l.personnelAlert)
                 Note("Conferidos no fim de cada ano pelo Tribunal de Contas. Duas rejeições deixam você inelegível." +
                     if (g.rejected > 0) " Rejeições até agora: ${g.rejected}." else "", if (g.rejected > 0) Ink.coral else Ink.muted)
                 SectionTitle("Gasto por área")
-                Note("100% é o nível de referência da cidade. Mais gasto melhora a área devagar, ao longo de meses.")
+                Note("100% é o nível de referência do governo. Mais gasto melhora a área devagar, ao longo de meses.")
                 for (a in Area.entries) {
                     val lvl = g.spend[a.ordinal]
                     SliderRow(
@@ -126,21 +126,30 @@ fun GovernoSheet(c: GameController) {
             }
             1 -> {
                 Spacer(Modifier.height(8.dp))
-                SliderRow(Icons.Rounded.Home, "IPTU", g.iptu.toFloat(), 0.6f..1.6f, Fmt.money(b.iptu),
+                val (taName, taDesc) = sim.taxANames
+                val (tbName, tbDesc) = sim.taxBNames
+                val rb = sim.taxBRange
+                SliderRow(if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) Icons.Rounded.Home else Icons.Rounded.DirectionsCar, taName, g.iptu.toFloat(), 0.6f..1.6f, Fmt.money(b.iptu),
                     hint = when { g.iptu < 0.85 -> "baixo"; g.iptu > 1.15 -> "alto"; else -> "normal" }, hintGood = g.iptu <= 1.15) {
                     sim.setIptu((it * 20).roundToInt() / 20.0); c.refresh()
                 }
-                SliderRow(Icons.Rounded.Storefront, "ISS (serviços)", g.iss.toFloat(), 2f..5f, Fmt.money(b.iss),
-                    hint = "${"%.1f".format(g.iss).replace('.', ',')}%", hintGood = g.iss <= 3.5) {
+                SliderRow(Icons.Rounded.Storefront, tbName, g.iss.toFloat(), rb.start.toFloat()..rb.endInclusive.toFloat(), Fmt.money(b.iss),
+                    hint = "${"%.1f".format(g.iss).replace('.', ',')}%", hintGood = g.iss <= (rb.start + rb.endInclusive) / 2) {
                     sim.setIss((it * 4).roundToInt() / 4.0); c.refresh()
                 }
-                Note("Imposto alto tira aprovação. ISS alto também aumenta a sonegação e espanta empresas.")
+                Note("Imposto alto tira aprovação. Alíquota alta também aumenta a sonegação e espanta empresas.")
                 SectionTitle("De onde vem o dinheiro")
-                LineItem("IPTU", Fmt.money(b.iptu), sub = "imposto sobre imóveis")
-                LineItem("ISS", Fmt.money(b.iss), sub = "imposto sobre serviços")
-                LineItem("ITBI e taxas", Fmt.money(b.itbi))
-                LineItem("FPM", Fmt.money(b.fpm), sub = "Fundo de Participação dos Municípios")
-                LineItem("Cota do ICMS", Fmt.money(b.icms), sub = "parte do imposto estadual")
+                LineItem(taName, Fmt.money(b.iptu), sub = taDesc)
+                LineItem(tbName, Fmt.money(b.iss), sub = tbDesc)
+                if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) {
+                    LineItem("ITBI e taxas", Fmt.money(b.itbi))
+                    LineItem("FPM", Fmt.money(b.fpm), sub = "Fundo de Participação dos Municípios")
+                    LineItem("Cota do ICMS", Fmt.money(b.icms), sub = "parte do imposto estadual")
+                } else {
+                    LineItem("ITCMD", Fmt.money(b.itbi), sub = "imposto sobre heranças e doações")
+                    LineItem("FPE", Fmt.money(b.fpm), sub = "Fundo de Participação dos Estados")
+                    LineItem("Outras receitas", Fmt.money(b.icms), sub = "royalties, taxas e serviços")
+                }
                 LineItem("SUS", Fmt.money(b.sus), sub = "só pode ir para a saúde")
                 LineItem("Fundeb", Fmt.money(b.fundeb), sub = "só pode ir para a educação")
             }
@@ -185,13 +194,13 @@ fun ObrasSheet(c: GameController) {
                 ) {
                     Icon(Icons.Rounded.Place, null, tint = Ink.gold, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text(if (target >= 0) "Construir ${Fmt.inB(g.bairros[target].name)}" else "Escolha a obra e depois toque no bairro",
+                    Text(if (target >= 0) "Construir ${Fmt.inB(g.bairros[target].name)}" else "Escolha a obra e depois toque no ${sim.unitName}",
                         style = Type.label, color = Ink.text, modifier = Modifier.weight(1f))
                     if (target >= 0) Text("Trocar", style = Type.label, color = Ink.gold, modifier = Modifier.clip(Shapes.chip).clickable { c.buildTarget = -1; c.refresh() }.padding(6.dp))
                 }
-                if (sim.obraUnits > 1) Note("Numa cidade deste tamanho cada obra é um lote de ${sim.obraUnits} unidades.")
+                if (sim.obraUnits > 1) Note("Com esta população, cada obra é um lote de ${sim.obraUnits} unidades.")
                 for (a in Area.entries) {
-                    val list = Content.OBRAS.filter { it.area == a }
+                    val list = sim.obras.filter { it.area == a }
                     SectionTitle(a.label)
                     for (t in list) {
                         val cost = sim.obraCost(t)
@@ -334,8 +343,9 @@ fun EquipeSheet(c: GameController) {
 fun CidadeSheet(c: GameController) {
     val sim = c.sim
     val g = c.game
-    val city = sim.city
-    Tabbed(c, Tab.CIDADE, city.name, "${Fmt.people(g.pop)} habitantes · ${sim.state.name}", listOf("Áreas", "Bairros", "Notícias", "Dados reais")) { sel ->
+    val city = sim.place
+    Tabbed(c, Tab.CIDADE, city.name, "${Fmt.people(g.pop)} habitantes" + if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) " · ${sim.state.name}" else "",
+        listOf("Áreas", sim.unitsName.replaceFirstChar { it.uppercase() }, "Notícias", "Dados reais")) { sel ->
         when (sel) {
             0 -> {
                 Spacer(Modifier.height(6.dp))
@@ -416,18 +426,22 @@ fun CarreiraSheet(c: GameController) {
         if (sel == 0) {
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BigStat("Cargo", "${g.role.label}", Ink.gold, Modifier.weight(1f))
-                BigStat("Mandato", "${g.termNumber}º", Ink.text, Modifier.weight(1f))
+                BigStat("Cargo", if (g.inOffice) g.role.label else "Sem mandato", Ink.gold, Modifier.weight(1f))
+                BigStat("Mandato", if (g.inOffice) "${g.termNumber}º" else "—", Ink.text, Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
-            val days = sim.dayOf(sim.electionDate) - g.day
-            LineItem("Próxima eleição", Fmt.date(sim.electionDate), sub = if (days > 0) "em $days dias" else null)
-            LineItem("Fim do mandato", "31 dez ${sim.termEndYear}")
-            LineItem("Pode disputar?", when {
-                g.rejected >= 2 -> "Não: inelegível"
-                g.termNumber >= 2 -> "Não: já foi reeleito"
-                else -> "Sim, reeleição"
-            }, if (g.rejected >= 2 || g.termNumber >= 2) Ink.coral else Ink.good)
+            val ey = Elections.year(sim)
+            val eday = Elections.firstRoundDay(sim, ey)
+            LineItem("Próxima eleição", "${Fmt.date(sim.dateOf(eday))} · ${if (Elections.isMunicipal(ey)) "municipal" else "geral"}",
+                sub = (eday - g.day).takeIf { it > 0 }?.let { "em $it dias" })
+            if (g.inOffice) LineItem("Fim do mandato", "31 dez ${sim.termEndYear}")
+            val opts = Elections.options(sim, ey)
+            LineItem("Pode disputar", if (opts.isEmpty()) (if (g.career.ineligibleUntil >= ey) "nada: inelegível" else "—") else opts.joinToString(" · ") { it.label.lowercase() },
+                if (opts.isEmpty()) Ink.coral else Ink.good)
+            if (g.career.history.isNotEmpty()) {
+                SectionTitle("Cargos já exercidos")
+                for (h in g.career.history.reversed()) LineItem(h.role.label, "${sim.dateOf(h.from).year}–${sim.dateOf(h.to).year}", sub = "${h.place} · saiu com ${h.approval.toInt()}%")
+            }
             SectionTitle("A escada")
             for (r in Role.entries) {
                 val now = r == g.role
@@ -455,7 +469,8 @@ fun CarreiraSheet(c: GameController) {
                 }
             }
             if (e == null) {
-                Note("A convenção é em 20 de julho de ${sim.termEndYear}. Até lá, governe bem: a aprovação de cada bairro vira voto.")
+                Note("Em 20 de julho de ${Elections.year(sim)} você escolhe o que disputar. Até lá, " +
+                    if (sim.governs) "governe bem: a aprovação de cada ${sim.unitName} vira voto." else "cuide do seu apoio: emendas, discursos e votações.")
                 return@Tabbed
             }
             e.vice?.let { v ->
@@ -466,6 +481,7 @@ fun CarreiraSheet(c: GameController) {
                 if (Elections.incoherence(sim, e) > 0) Note("Partidos distantes na coligação tiram ${Fmt.signed(-Elections.incoherence(sim, e))} pontos.", Ink.amber)
             }
             val pl = e.candidates.indexOfFirst { it.player }
+            LineItem("Disputa", e.office.label, Ink.gold, sub = if (e.proportional) "proporcional" else "majoritária")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 BigStat("Verba de campanha", Fmt.money(e.fund), Ink.gold, Modifier.weight(1f))
                 BigStat(if (e.finished) "Resultado" else "Faltam", if (e.finished) (if (e.won) "Eleito" else "Derrota") else "${(if (e.round == 1) e.runoffDay else e.day) - g.day} dias",
@@ -473,7 +489,17 @@ fun CarreiraSheet(c: GameController) {
             }
             SectionTitle("Pesquisa")
             val last = e.polls.lastOrNull() ?: e.totals.takeIf { it.isNotEmpty() }
-            if (last == null) Note("A primeira pesquisa sai em uma semana.")
+            if (e.proportional) {
+                if (e.totals.size == 2) LineItem("Resultado", "${Fmt.people(e.totals[0])} votos", sub = "quociente: ${Fmt.people(e.totals[1])}")
+                else if (e.polls.isEmpty()) Note("A primeira pesquisa sai uma semana depois do início da campanha.")
+                else {
+                    val q = e.polls.last()[0]
+                    LineItem("Votos estimados", "${(q * 100).toInt()}% do quociente", if (q >= 0.7) Ink.good else if (q >= 0.4) Ink.amber else Ink.coral,
+                        sub = "70% elege; 40% elege se o partido for grande")
+                    if (e.polls.size >= 2) LineChart("Votos estimados (% do quociente)", e.polls.map { (it[0] * 100).toFloat() }, "${(q * 100).toInt()}%")
+                }
+            }
+            else if (last == null) Note("A primeira pesquisa sai em uma semana.")
             else for (i in e.candidates.indices.sortedByDescending { last[it] }) {
                 val cand = e.candidates[i]
                 Column(Modifier.padding(vertical = 5.dp)) {
@@ -486,7 +512,7 @@ fun CarreiraSheet(c: GameController) {
                     Meter((last[i] * 100).toFloat(), Modifier.fillMaxWidth().padding(top = 4.dp), if (cand.player) Ink.gold else Ink.muted)
                 }
             }
-            if (e.polls.size >= 2) {
+            if (!e.proportional && e.polls.size >= 2) {
                 Spacer(Modifier.height(8.dp))
                 LineChart("Sua intenção de voto", e.polls.map { (it[pl] * 100).toFloat() }, Fmt.pct(e.polls.last()[pl]))
             }
@@ -494,7 +520,7 @@ fun CarreiraSheet(c: GameController) {
                 SectionTitle("Campanha")
                 Btn("Propaganda na TV e nas redes · ${Fmt.money(Elections.adCost(sim))}", Modifier.fillMaxWidth(), BtnKind.PRIMARY, Icons.Rounded.Tv,
                     enabled = e.fund >= Elections.adCost(sim) && e.boost < 6) { c.act("Propaganda no ar") { Elections.advertise(sim) } }
-                Note("Comícios: toque num bairro no mapa e escolha Comício (${Fmt.money(Elections.rallyCost(sim))}, até 2 por bairro).")
+                Note("Comícios: toque num ${sim.unitName} no mapa e escolha Comício (${Fmt.money(Elections.rallyCost(sim))}, até 2 em cada).")
             }
         }
     }
