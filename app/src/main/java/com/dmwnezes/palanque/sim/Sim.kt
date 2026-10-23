@@ -33,7 +33,7 @@ class Budget(
     val taxBase get() = own + fpm + icms
     val expense get() = areas.sum() + admin + camara + interest + amort + upkeep + works + laws + cargos
     /** gasto com pessoal do executivo (Lei de Responsabilidade Fiscal) */
-    val personnel get() = areas.sum() * 0.52 + admin * 0.6
+    val personnel get() = areas.sum() * 0.46 + admin * 0.6
     /** o que conta para o piso: saúde sem o dinheiro do SUS, educação sem metade do Fundeb */
     val healthPiso get() = areas[Area.SAUDE.ordinal] - sus
     val eduPiso get() = areas[Area.EDUCACAO.ordinal] - fundeb * 0.5
@@ -238,7 +238,9 @@ class Sim(val br: Brasil, val game: Game) {
             else -> 0.0
         }
         val mayor = if (level == Level.ESTADO && bs.mayorParty == game.player.party) 4.0 else 0.0
-        return (12 + bs.local + game.career.capital * 0.3 + fame + stance + party.size * 6 + mayor + bs.rallies * 2.5).coerceIn(1.0, 95.0)
+        // quem já tem mandato é conhecido: o nome aparece, o gabinete atende
+        val known = if (legislates) 8.0 else 0.0
+        return (12 + known + bs.local + game.career.capital * 0.3 + fame + stance + party.size * 6 + mayor + bs.rallies * 2.5).coerceIn(1.0, 95.0)
     }
 
     // ───────────────────────── passo diário ─────────────────────────
@@ -333,6 +335,7 @@ class Sim(val br: Brasil, val game: Game) {
         g.pib *= 1 + (0.012 + (econ - 50) * 0.0007 + (g.ind[Area.SEGURANCA.ordinal] - 50) * 0.0002 + mod("pib")) / 12
 
         if (governs) {
+            tceAlert()
             for (s in g.secretarios) s?.let {
                 it.monthsInOffice++
                 // secretário desonesto pode virar escândalo
@@ -357,6 +360,23 @@ class Sim(val br: Brasil, val game: Game) {
         g.history += rec
         g.lastMonth = rec
         if (g.history.size > 120) g.history.removeAt(0)
+    }
+
+    /** Aviso do Tribunal de Contas quando o ano caminha para a rejeição (no máximo a cada 3 meses). */
+    private fun tceAlert() {
+        val g = game
+        if (g.day - g.tceAlertDay < 90) return
+        val l = limits()
+        val y = g.year
+        val pers = if (y.months > 0) y.personnel / y.revenue else l.personnel
+        val problems = buildList {
+            if (l.health < healthFloor + 0.01) add("saúde perto do piso")
+            if (l.education < 0.26) add("educação perto do piso")
+            if (pers > personnelCap * 0.97 || l.personnel > personnelCap * 0.97) add("pessoal perto do teto de ${(personnelCap * 100).roundToInt()}%")
+        }
+        if (problems.isEmpty()) return
+        g.tceAlertDay = g.day
+        news("gavel", "Alerta do Tribunal de Contas: ${problems.joinToString(", ")}. Ajuste o orçamento até dezembro", 3)
     }
 
     /** O governo da IA: preenche secretarias, faz obras quando sobra caixa e evita atrasar salário. */
@@ -387,8 +407,12 @@ class Sim(val br: Brasil, val game: Game) {
                 if (edu < 0.25) add("educação abaixo de 25%")
                 if (pers > personnelCap) add("pessoal acima de ${(personnelCap * 100).roundToInt()}%")
             }
+            // o Tribunal dá o parecer; quem julga é o legislativo — 2/3 da base derrubam a rejeição
+            val base = g.camara.count { Camara.stance(it) > 0 }
             if (fails.isEmpty()) news("check", "Contas de $year aprovadas pelo Tribunal de Contas", 1)
-            else {
+            else if (base * 3 >= g.camara.size * 2) {
+                news("gavel", "O Tribunal recomendou rejeitar as contas de $year (${fails.joinToString(", ")}), mas a sua base derrubou o parecer", 2)
+            } else {
                 g.rejected++
                 for (b in g.bairros) b.approval -= 4
                 if (g.rejected >= 2) g.career.ineligibleUntil = year + 8

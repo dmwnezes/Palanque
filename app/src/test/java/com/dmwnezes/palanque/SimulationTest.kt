@@ -33,7 +33,7 @@ object TestBr {
      * Joga sozinho: resolve eventos com a 1ª opção, faz campanha, constrói, manda emendas e vota.
      * pick escolhe o cargo nas eleições; gap decide o que fazer fora do cargo. Devolve o Sim final (pode ter trocado de jurisdição).
      */
-    fun autoplay(start: Sim, days: Int, log: MutableList<String> = mutableListOf(), pick: (Sim, List<com.dmwnezes.palanque.sim.Role>) -> com.dmwnezes.palanque.sim.Role?): Sim {
+    fun autoplay(start: Sim, days: Int, log: MutableList<String> = mutableListOf(), lazy: Boolean = false, pick: (Sim, List<com.dmwnezes.palanque.sim.Role>) -> com.dmwnezes.palanque.sim.Role?): Sim {
         var s = start
         var day = 0
         while (s.game.gameOver == null && day < days) {
@@ -47,9 +47,9 @@ object TestBr {
             gg.election?.let { e ->
                 e.seen = true
                 if (!e.conventionDone) Elections.confirmConvention(s, 0, Elections.coalitionOptions(s).filter { it.second }.take(2).map { it.first.id })
-                while (e.debate > 0) Elections.answerDebate(s, 0)
-                if (!e.finished && e.fund > Elections.adCost(s)) Elections.advertise(s)
-                if (!e.finished && e.phase == 1) for (b in gg.bairros.indices.take(6)) Elections.rally(s, b)
+                while (e.debate > 0) Elections.answerDebate(s, if (lazy) 1 else 0)
+                if (!e.finished && e.fund > Elections.adCost(s) && (!lazy || e.boost < 3)) Elections.advertise(s)
+                if (!lazy && !e.finished && e.phase == 1) for (b in gg.bairros.indices.take(6)) Elections.rally(s, b)
                 if (e.finished && e.round >= 1 && day % 30 == 0) Unit
             }
             if (s.governs && day % 60 == 0 && gg.cash > s.budget().revenue * 0.15) {
@@ -62,11 +62,11 @@ object TestBr {
             }
             if (s.legislates) {
                 com.dmwnezes.palanque.sim.Camara.execBill(s)?.let { com.dmwnezes.palanque.sim.Legislativo.vote(s, it, 1) }
-                if (gg.emendasLeft > 0 && day % 45 == 0) {
+                if (gg.emendasLeft > 0 && day % (if (lazy) 300 else 45) == 0) {
                     val unit = gg.bairros.indices.maxBy { gg.bairros[it].popShare }
                     com.dmwnezes.palanque.sim.Legislativo.sendEmenda(s, unit, com.dmwnezes.palanque.sim.Area.SAUDE, gg.emendasLeft / 3)
                 }
-                com.dmwnezes.palanque.sim.Legislativo.speech(s)
+                if (!lazy) com.dmwnezes.palanque.sim.Legislativo.speech(s)
             }
             check(!(gg.approval.isNaN() || gg.cash.isNaN() || gg.ind.any { it.isNaN() })) { "NaN em ${s.place.name} dia $day" }
         }

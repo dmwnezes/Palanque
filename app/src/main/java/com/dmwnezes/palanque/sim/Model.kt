@@ -81,6 +81,8 @@ class Settings(
     val seed: Long = 2029L,
     /** eventos aleatórios ligados (pode mudar no menu de pausa) */
     var randomEvents: Boolean = true,
+    /** 0 fácil, 1 normal, 2 difícil: força dos adversários e quociente (pode mudar no menu de pausa) */
+    var difficulty: Int = 1,
 )
 
 /** Estado de cada bairro (a geometria é gerada de novo a partir do código da cidade). */
@@ -330,6 +332,8 @@ class Game(
     /** salários atrasados no último fechamento */
     var late: Boolean = false,
     var tceWarnings: Int = 0,
+    /** último mês em que o Tribunal de Contas avisou do risco de rejeição */
+    var tceAlertDay: Int = -999,
     var rejected: Int = 0,
     var election: Election? = null,
     var gameOver: GameOver? = null,

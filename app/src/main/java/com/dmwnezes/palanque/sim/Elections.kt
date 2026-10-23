@@ -130,11 +130,11 @@ object Elections {
         val n = if (s.eleitores > RUNOFF_VOTERS) 4 else 2 + r.nextInt(2)
         val incumbent = g.inOffice && g.role == office
         // oposição mais forte contra um governo fraco
-        val opp = if (incumbent) 47 + (50 - g.approval) * 0.35 else 46.0
+        val opp = (if (incumbent) 45 + (50 - g.approval) * 0.35 else 44.0) + difficultyShift(s)
         val cands = mutableListOf(Candidate(g.player.name, g.player.party, 0.0, player = true))
         // quem governa (ou o partido dele) defende o cargo quando não é você
         if (!incumbent && g.execParty.isNotEmpty() && g.execParty != g.player.party) {
-            cands += Candidate(if (s.rng(77).nextBoolean()) g.execName else Content.personName(r), g.execParty, 44 + (g.execApproval - 50) * 0.5)
+            cands += Candidate(if (s.rng(77).nextBoolean()) g.execName else Content.personName(r), g.execParty, 42 + (g.execApproval - 50) * 0.5 + difficultyShift(s))
             parties.removeAll { it.id == g.execParty }
         }
         while (cands.size < n + 1) cands += Candidate(Content.personName(r), parties[cands.size - 1].id, opp - (cands.size - 1) * 5 + (r.nextDouble() - 0.5) * 8)
@@ -225,8 +225,15 @@ object Elections {
         return Triple(by, votes, quotient)
     }
 
-    /** Eleito com 70% do quociente, ou com 40% se o partido for grande (votos da legenda). */
-    fun elected(s: Sim, votes: Double, quotient: Double) = votes >= 0.7 * quotient || (votes >= 0.4 * quotient && s.party.size >= 0.5)
+    /** Força extra dos adversários conforme a dificuldade. */
+    fun difficultyShift(s: Sim) = when (s.game.settings.difficulty) { 0 -> -5.0; 2 -> 4.0; else -> 0.0 }
+
+    /** Parte do quociente que elege sozinho (o resto vem da legenda, se o partido for grande). */
+    fun quotientNeeded(s: Sim) = when (s.game.settings.difficulty) { 0 -> 0.45; 2 -> 0.75; else -> 0.6 }
+
+    /** Eleito com 60% do quociente (normal), ou com 2/3 disso se o partido for grande (votos da legenda). */
+    fun elected(s: Sim, votes: Double, quotient: Double) =
+        votes >= quotientNeeded(s) * quotient || (votes >= quotientNeeded(s) * 0.66 * quotient && s.party.size >= 0.5)
 
     fun poll(s: Sim, e: Election): List<Double> {
         if (e.proportional) {
@@ -248,7 +255,7 @@ object Elections {
     /** Os adversários também fazem campanha: quem tem mais TV cresce um pouco. */
     private fun momentum(s: Sim, e: Election) {
         val r = s.rng(717 + e.polls.size)
-        for (c in e.candidates) if (!c.player) c.strength += (r.nextDouble() - 0.5) * 2 + s.partyOf(c.party).size * 0.3 - 0.2
+        for (c in e.candidates) if (!c.player) c.strength += (r.nextDouble() - 0.5) * 2 + s.partyOf(c.party).size * 0.3 - 0.35
     }
 
     private fun attack(s: Sim, e: Election) {
@@ -418,6 +425,8 @@ object Elections {
         val again = g.inOffice && g.role == office
         val wasExec = s.governs
         g.termNumber = if (again) g.termNumber + 1 else 1
+        // as rejeições contam por cargo: começa do zero num cargo novo
+        if (!again) g.rejected = 0
         g.role = office; g.inOffice = true; g.running = null; g.election = null
         g.termStart = g.day + 1
         g.bairros.forEach { it.rallies = 0 }

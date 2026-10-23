@@ -495,7 +495,7 @@ fun CarreiraSheet(c: GameController) {
                 else {
                     val q = e.polls.last()[0]
                     LineItem("Votos estimados", "${(q * 100).toInt()}% do quociente", if (q >= 0.7) Ink.good else if (q >= 0.4) Ink.amber else Ink.coral,
-                        sub = "70% elege; 40% elege se o partido for grande")
+                        sub = "60% elege; 40% elege se o partido for grande")
                     if (e.polls.size >= 2) LineChart("Votos estimados (% do quociente)", e.polls.map { (it[0] * 100).toFloat() }, "${(q * 100).toInt()}%")
                 }
             }

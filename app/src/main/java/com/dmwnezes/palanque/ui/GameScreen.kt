@@ -488,7 +488,7 @@ private fun ElectionCard(c: GameController) {
                 Cell("Quociente", Fmt.people(q))
                 Cell("Do quociente", Fmt.pct(v / q))
             }
-            Text("Precisa de 70% do quociente — ou 40%, se o partido for grande e puxar votos de legenda.", style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 10.dp))
+            Text("Precisa de 60% do quociente — ou 40%, se o partido for grande e puxar votos de legenda.", style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 10.dp))
             Spacer(Modifier.height(14.dp))
             Btn("Ver os votos por região", Modifier.fillMaxWidth(), BtnKind.PRIMARY) { e.seen = true; c.layer = Layer.VOTOS; c.refresh() }
             return@Overlay
@@ -556,6 +556,9 @@ private fun SettingsOverlay(c: GameController, store: SaveStore, onExit: () -> U
         ToggleRow("Eventos aleatórios", events, Icons.Rounded.Casino, sub = "Crises, pedidos e notícias que pedem decisão") {
             events = it; c.game.settings.randomEvents = it; c.refresh()
         }
+        var diff by remember { mutableStateOf(c.game.settings.difficulty) }
+        Text("Dificuldade das eleições", style = Type.label, color = Ink.muted, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+        Segmented(listOf(0, 1, 2), diff, { listOf("Fácil", "Normal", "Difícil")[it] }) { diff = it; c.game.settings.difficulty = it; c.refresh() }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Btn("Atualização", Modifier.weight(1f), icon = Icons.Rounded.SystemUpdate) { showUpdate = true }
