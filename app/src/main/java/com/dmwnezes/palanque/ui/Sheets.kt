@@ -1,0 +1,483 @@
+package com.dmwnezes.palanque.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.dmwnezes.palanque.sim.Area
+import com.dmwnezes.palanque.sim.Content
+import com.dmwnezes.palanque.sim.Elections
+import com.dmwnezes.palanque.sim.Fmt
+import com.dmwnezes.palanque.sim.Role
+import com.dmwnezes.palanque.sim.Secretario
+import com.dmwnezes.palanque.world.Stat
+import kotlin.math.roundToInt
+
+@Composable
+private fun Tabbed(c: GameController, tab: Tab, title: String, sub: String?, tabs: List<String>, content: @Composable ColumnScope.(Int) -> Unit) {
+    @Suppress("UNUSED_EXPRESSION") c.tick
+    val sel = (c.subTab[tab] ?: 0).coerceIn(0, tabs.lastIndex)
+    Column(Modifier.fillMaxSize()) {
+        SheetHeaderTabs(title, sub, tabs, sel) { c.subTab[tab] = it; c.refresh() }
+        Box(Modifier.weight(1f)) { SheetBody { content(sel) } }
+    }
+}
+
+@Composable
+private fun Note(text: String, color: Color = Ink.muted) {
+    Text(text, style = Type.small, color = color, modifier = Modifier.padding(vertical = 4.dp))
+}
+
+@Composable
+private fun LineItem(label: String, value: String, color: Color = Ink.text, sub: String? = null) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = Type.body, color = Ink.text)
+            if (sub != null) Text(sub, style = Type.small, color = Ink.muted)
+        }
+        Text(value, style = Type.number.copy(fontSize = 15.sp), color = color)
+    }
+}
+
+@Composable
+private fun LimitRow(label: String, value: Double, ok: Boolean, rule: String, warn: Boolean = false) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (ok && !warn) Icons.Rounded.CheckCircle else Icons.Rounded.Error, null, tint = if (!ok) Ink.coral else if (warn) Ink.amber else Ink.good, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(label, style = Type.label, color = Ink.text, modifier = Modifier.weight(1f))
+        Text(rule, style = Type.small, color = Ink.muted)
+        Spacer(Modifier.width(10.dp))
+        Text(Fmt.pct(value), style = Type.number.copy(fontSize = 15.sp), color = if (!ok) Ink.coral else if (warn) Ink.amber else Ink.text)
+    }
+}
+
+// ───────────────────────── Governo ─────────────────────────
+
+@Composable
+fun GovernoSheet(c: GameController) {
+    val sim = c.sim
+    val g = c.game
+    Tabbed(c, Tab.GOVERNO, "Governo", "Prefeitura de ${sim.city.name}", listOf("Orçamento", "Impostos", "Dívida")) { sel ->
+        val b = sim.budget()
+        when (sel) {
+            0 -> {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BigStat("Receita por ano", Fmt.money(b.revenue), Ink.text, Modifier.weight(1f))
+                    BigStat("Despesa por ano", Fmt.money(b.expense), Ink.text, Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BigStat("Saldo por ano", Fmt.money(b.balance), if (b.balance >= 0) Ink.good else Ink.coral, Modifier.weight(1f))
+                    BigStat("Em caixa", Fmt.money(g.cash), if (g.cash >= 0) Ink.text else Ink.coral, Modifier.weight(1f))
+                }
+                SectionTitle("Limites da lei")
+                val l = sim.limits()
+                LimitRow("Saúde", l.health, l.healthOk, "mín. 15%")
+                LimitRow("Educação", l.education, l.educationOk, "mín. 25%")
+                LimitRow("Pessoal (LRF)", l.personnel, l.personnelOk, "máx. 54%", l.personnelAlert)
+                Note("Conferidos no fim de cada ano pelo Tribunal de Contas. Duas rejeições deixam você inelegível." +
+                    if (g.rejected > 0) " Rejeições até agora: ${g.rejected}." else "", if (g.rejected > 0) Ink.coral else Ink.muted)
+                SectionTitle("Gasto por área")
+                Note("100% é o nível de referência da cidade. Mais gasto melhora a área devagar, ao longo de meses.")
+                for (a in Area.entries) {
+                    val lvl = g.spend[a.ordinal]
+                    SliderRow(
+                        GameIcons.area(a), a.label, lvl.toFloat(), 0.3f..2f, Fmt.money(b.area(a)),
+                        hint = "${(lvl * 100).roundToInt()}%", hintGood = lvl >= 1.0,
+                    ) { sim.setSpend(a, (it * 20).roundToInt() / 20.0); c.refresh() }
+                }
+                SectionTitle("Outras despesas")
+                LineItem("Administração", Fmt.money(b.admin))
+                LineItem("Repasse à Câmara", Fmt.money(b.camara))
+                LineItem("Manutenção das obras", Fmt.money(b.upkeep))
+                LineItem("Obras em andamento", Fmt.money(b.works))
+                LineItem("Juros e amortização", Fmt.money(b.interest + b.amort))
+            }
+            1 -> {
+                Spacer(Modifier.height(8.dp))
+                SliderRow(Icons.Rounded.Home, "IPTU", g.iptu.toFloat(), 0.6f..1.6f, Fmt.money(b.iptu),
+                    hint = when { g.iptu < 0.85 -> "baixo"; g.iptu > 1.15 -> "alto"; else -> "normal" }, hintGood = g.iptu <= 1.15) {
+                    sim.setIptu((it * 20).roundToInt() / 20.0); c.refresh()
+                }
+                SliderRow(Icons.Rounded.Storefront, "ISS (serviços)", g.iss.toFloat(), 2f..5f, Fmt.money(b.iss),
+                    hint = "${"%.1f".format(g.iss).replace('.', ',')}%", hintGood = g.iss <= 3.5) {
+                    sim.setIss((it * 4).roundToInt() / 4.0); c.refresh()
+                }
+                Note("Imposto alto tira aprovação. ISS alto também aumenta a sonegação e espanta empresas.")
+                SectionTitle("De onde vem o dinheiro")
+                LineItem("IPTU", Fmt.money(b.iptu), sub = "imposto sobre imóveis")
+                LineItem("ISS", Fmt.money(b.iss), sub = "imposto sobre serviços")
+                LineItem("ITBI e taxas", Fmt.money(b.itbi))
+                LineItem("FPM", Fmt.money(b.fpm), sub = "Fundo de Participação dos Municípios")
+                LineItem("Cota do ICMS", Fmt.money(b.icms), sub = "parte do imposto estadual")
+                LineItem("SUS", Fmt.money(b.sus), sub = "só pode ir para a saúde")
+                LineItem("Fundeb", Fmt.money(b.fundeb), sub = "só pode ir para a educação")
+            }
+            else -> {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BigStat("Dívida", Fmt.money(g.debt), Ink.text, Modifier.weight(1f))
+                    BigStat("Juros por ano", Fmt.money(b.interest), Ink.amber, Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(10.dp))
+                LineItem("Limite total (120% da receita)", Fmt.money(sim.debtLimit))
+                LineItem("Pode pegar neste ano", Fmt.money(sim.borrowLimit), Ink.gold)
+                Note("Juros de 0,9% ao mês. A dívida é paga em 10 anos.")
+                Spacer(Modifier.height(10.dp))
+                val opts = listOf(0.02, 0.05, 0.10).map { b.revenue * it }.filter { it <= sim.borrowLimit + 1 }
+                if (opts.isEmpty()) Note("Sem crédito disponível agora.", Ink.coral)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (v in opts) Btn(Fmt.money(v), Modifier.weight(1f), icon = Icons.Rounded.Add) { c.act { sim.borrow(v) } }
+                }
+                Spacer(Modifier.height(8.dp))
+                Btn("Amortizar ${Fmt.money(minOf(g.debt, b.revenue * 0.05))}", Modifier.fillMaxWidth(), BtnKind.GHOST, Icons.Rounded.Remove,
+                    enabled = g.debt > 0 && g.cash > 0) { c.act { sim.repay(b.revenue * 0.05) } }
+            }
+        }
+    }
+}
+
+// ───────────────────────── Obras ─────────────────────────
+
+@Composable
+fun ObrasSheet(c: GameController) {
+    val sim = c.sim
+    val g = c.game
+    Tabbed(c, Tab.OBRAS, "Obras", "${sim.activeObras} de ${sim.maxObras} em andamento", listOf("Catálogo", "Andamento", "Prontas")) { sel ->
+        when (sel) {
+            0 -> {
+                val target = c.buildTarget
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    Modifier.fillMaxWidth().clip(Shapes.tile).background(Ink.raised).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.Place, null, tint = Ink.gold, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(if (target >= 0) "Construir ${Fmt.inB(g.bairros[target].name)}" else "Escolha a obra e depois toque no bairro",
+                        style = Type.label, color = Ink.text, modifier = Modifier.weight(1f))
+                    if (target >= 0) Text("Trocar", style = Type.label, color = Ink.gold, modifier = Modifier.clip(Shapes.chip).clickable { c.buildTarget = -1; c.refresh() }.padding(6.dp))
+                }
+                if (sim.obraUnits > 1) Note("Numa cidade deste tamanho cada obra é um lote de ${sim.obraUnits} unidades.")
+                for (a in Area.entries) {
+                    val list = Content.OBRAS.filter { it.area == a }
+                    SectionTitle(a.label)
+                    for (t in list) {
+                        val cost = sim.obraCost(t)
+                        val canStart = sim.activeObras < sim.maxObras && g.cash >= cost * 0.15
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(Shapes.tile).background(Ink.raised)
+                                .clickable {
+                                    if (target >= 0) { c.act { sim.build(t.id, target) }; c.buildTarget = -1; c.select(target); c.openTab(null) }
+                                    else { c.openTab(null); c.placing = t.id; c.refresh() }
+                                }.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(38.dp).clip(CircleShape).background(Ink.oceanDeep), contentAlignment = Alignment.Center) {
+                                Icon(GameIcons.of(t.icon), null, tint = if (canStart) Ink.gold else Ink.faint, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(t.name, style = Type.body.copy(fontWeight = FontWeight.Medium), color = Ink.text)
+                                Text("${t.desc} · atende ${Fmt.people(sim.obraServes(t))}", style = Type.small, color = Ink.muted, maxLines = 2)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(Fmt.money(cost), style = Type.number.copy(fontSize = 14.sp), color = if (canStart) Ink.text else Ink.coral)
+                                Text("${t.months} meses", style = Type.small, color = Ink.muted)
+                            }
+                        }
+                    }
+                }
+                Note("Paga 15% na largada e o resto mês a mês. Pronta, a obra custa 6% do valor por ano em manutenção.")
+            }
+            1 -> {
+                val list = g.obras.filter { !it.done }
+                if (list.isEmpty()) Note("Nenhuma obra em andamento.")
+                for (o in list) {
+                    val t = Content.obra(o.type)
+                    Column(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(Shapes.tile).background(Ink.raised).clickable { c.select(o.bairro); c.openTab(null) }.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(GameIcons.of(t.icon), null, tint = Ink.gold, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(t.name, style = Type.body, color = Ink.text, modifier = Modifier.weight(1f))
+                            Text("${(o.progress * 100).toInt()}%", style = Type.number.copy(fontSize = 14.sp), color = Ink.gold)
+                        }
+                        Text(g.bairros[o.bairro].name + if (o.share < 1) " · convênio com o estado" else "", style = Type.small, color = Ink.muted)
+                        Meter((o.progress * 100).toFloat(), Modifier.fillMaxWidth().padding(top = 6.dp), Ink.gold)
+                    }
+                }
+                if (g.cash <= 0 && list.isNotEmpty()) Note("Obras paradas: o caixa está vazio.", Ink.coral)
+            }
+            else -> {
+                val list = g.obras.filter { it.done }
+                if (list.isEmpty()) Note("Nenhuma obra entregue ainda.")
+                for (o in list.reversed()) {
+                    val t = Content.obra(o.type)
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(Shapes.tile).background(Ink.raised).clickable { c.select(o.bairro); c.openTab(null) }.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(GameIcons.of(t.icon), null, tint = Ink.gold, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(t.name, style = Type.body, color = Ink.text)
+                            Text(g.bairros[o.bairro].name, style = Type.small, color = Ink.muted)
+                        }
+                        Text(t.area.short, style = Type.small, color = Ink.muted)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ───────────────────────── Equipe ─────────────────────────
+
+@Composable
+private fun SecretarioLine(c: GameController, s: Secretario) {
+    val p = c.sim.partyOf(s.party)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(s.name, style = Type.body.copy(fontWeight = FontWeight.Medium), color = Ink.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Tag(p.sigla, Color(p.color))
+                Spacer(Modifier.width(8.dp))
+                Text("Competência", style = Type.small, color = Ink.muted)
+                Spacer(Modifier.width(4.dp))
+                Stars(s.competence)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Honestidade", style = Type.small, color = Ink.muted)
+                Spacer(Modifier.width(4.dp))
+                Stars(s.honesty, Ink.teal)
+                Spacer(Modifier.width(8.dp))
+                Text("Lealdade", style = Type.small, color = Ink.muted)
+                Spacer(Modifier.width(4.dp))
+                Stars(s.loyalty, Ink.muted)
+            }
+        }
+    }
+}
+
+@Composable
+fun EquipeSheet(c: GameController) {
+    val sim = c.sim
+    val g = c.game
+    var open by remember { mutableStateOf<Area?>(g.secretarios.indexOfFirst { it == null }.takeIf { it >= 0 }?.let { Area.entries[it] }) }
+    val vagas = g.secretarios.count { it == null }
+    Tabbed(c, Tab.EQUIPE, "Equipe", if (vagas > 0) "$vagas secretarias vagas" else "Secretariado completo", listOf("Secretarias")) { _ ->
+        Note("Competência deixa o dinheiro render mais. Honestidade baixa pode virar escândalo. Sem secretário a área perde 10% de eficiência.")
+        for (a in Area.entries) {
+            val s = g.secretarios[a.ordinal]
+            val expanded = open == a
+            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(Shapes.tile).background(Ink.raised).padding(12.dp)) {
+                Row(Modifier.fillMaxWidth().clickable { open = if (expanded) null else a }, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(GameIcons.area(a), null, tint = if (s == null) Ink.coral else Ink.gold, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(a.label, style = Type.label, color = Ink.muted, modifier = Modifier.weight(1f))
+                    Text("Eficiência ${Fmt.pct(sim.efficiency(a))}", style = Type.small, color = if (sim.efficiency(a) >= 1) Ink.good else Ink.amber)
+                    Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, tint = Ink.muted)
+                }
+                Spacer(Modifier.height(6.dp))
+                if (s != null) {
+                    SecretarioLine(c, s)
+                    if (expanded) Btn("Demitir", Modifier.padding(top = 8.dp), BtnKind.GHOST) { sim.fire(a); c.refresh() }
+                } else Text("Vaga", style = Type.body, color = Ink.coral)
+                if (expanded) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(if (s == null) "Candidatos" else "Para substituir", style = Type.small, color = Ink.muted)
+                    for (cand in g.pool.filter { it.area == a }) {
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp).clip(Shapes.small).background(Ink.oceanDeep).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { SecretarioLine(c, cand) }
+                            Btn("Nomear", kind = BtnKind.PRIMARY) { c.act { sim.hire(cand.id) }; open = null }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ───────────────────────── Cidade ─────────────────────────
+
+@Composable
+fun CidadeSheet(c: GameController) {
+    val sim = c.sim
+    val g = c.game
+    val city = sim.city
+    Tabbed(c, Tab.CIDADE, city.name, "${Fmt.people(g.pop)} habitantes · ${sim.state.name}", listOf("Áreas", "Bairros", "Notícias", "Dados reais")) { sel ->
+        when (sel) {
+            0 -> {
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BigStat("Aprovação", "${g.approval.toInt()}%", Ink.scale(g.approval.toFloat()), Modifier.weight(1f))
+                    BigStat("Satisfação", "${sim.satisfaction().toInt()}", Ink.scale(sim.satisfaction().toFloat()), Modifier.weight(1f))
+                }
+                SectionTitle("Como está cada área")
+                for (a in Area.entries) {
+                    val v = g.ind[a.ordinal]
+                    MeterRow(GameIcons.area(a), a.label, v.toFloat(), v.toInt().toString(), (sim.target(a) - v).toFloat())
+                }
+                Note("A seta mostra para onde a área caminha com o gasto, a equipe e as obras de hoje.")
+                if (g.history.size >= 2) {
+                    Spacer(Modifier.height(8.dp))
+                    LineChart("Aprovação", g.history.takeLast(48).map { it.approval.toFloat() }, "${g.approval.toInt()}%")
+                }
+            }
+            1 -> {
+                Spacer(Modifier.height(6.dp))
+                for (i in g.bairros.indices.sortedByDescending { g.bairros[it].approval }) {
+                    val b = g.bairros[i]
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(Shapes.tile).background(Ink.raised).clickable { c.select(i); c.openTab(null) }.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(b.name, style = Type.body, color = Ink.text)
+                            Text("${Fmt.people(g.pop * b.popShare)} · quer ${b.need.short.lowercase()}", style = Type.small, color = Ink.muted)
+                            Meter(b.approval.toFloat(), Modifier.fillMaxWidth().padding(top = 6.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text("${b.approval.toInt()}%", style = Type.number, color = Ink.scale(b.approval.toFloat()))
+                    }
+                }
+            }
+            2 -> {
+                Spacer(Modifier.height(6.dp))
+                for (f in g.feed.take(60)) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
+                        Icon(GameIcons.of(f.icon), null, tint = Ink.tone(f.tone), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(f.text, style = Type.body, color = Ink.text)
+                            Text(Fmt.date(sim.dateOf(f.day)), style = Type.small, color = Ink.faint)
+                        }
+                    }
+                }
+            }
+            else -> {
+                Spacer(Modifier.height(6.dp))
+                Note("Ponto de partida do jogo: os números reais da cidade.")
+                fun v(s: Stat) = city.stat(s)
+                fun ok(s: Stat) = !v(s).isNaN()
+                if (ok(Stat.POP)) LineItem("População estimada", Fmt.people(v(Stat.POP).toDouble()))
+                if (ok(Stat.AREA)) LineItem("Área", "${Fmt.people(v(Stat.AREA).toDouble())} km²")
+                if (ok(Stat.PIB)) LineItem("PIB", Fmt.money(v(Stat.PIB).toDouble()))
+                if (ok(Stat.PIB_PC)) LineItem("PIB por habitante", Fmt.money(v(Stat.PIB_PC).toDouble()))
+                if (ok(Stat.RENDA)) LineItem("Renda média por pessoa", Fmt.money(v(Stat.RENDA).toDouble()) + "/mês")
+                if (ok(Stat.IDH)) LineItem("IDH", "%.3f".format(v(Stat.IDH)).replace('.', ','))
+                if (ok(Stat.ALFAB)) LineItem("Alfabetização", "${"%.1f".format(v(Stat.ALFAB)).replace('.', ',')}%")
+                if (ok(Stat.AGUA)) LineItem("Água da rede geral", "${v(Stat.AGUA).roundToInt()}%")
+                if (ok(Stat.ESGOTO)) LineItem("Esgoto adequado", "${v(Stat.ESGOTO).roundToInt()}%")
+                if (ok(Stat.HOMIC)) LineItem("Homicídios por 100 mil", "${"%.1f".format(v(Stat.HOMIC)).replace('.', ',')}")
+                if (ok(Stat.ELEITORES)) LineItem("Eleitores", Fmt.people(v(Stat.ELEITORES).toDouble()))
+                Note("Fontes: IBGE (Censo 2022, estimativas, PIB dos Municípios), PNUD/Ipea (IDH), Ipea/FBSP (Atlas da Violência), TSE.", Ink.faint)
+            }
+        }
+    }
+}
+
+// ───────────────────────── Carreira ─────────────────────────
+
+@Composable
+fun CarreiraSheet(c: GameController) {
+    val sim = c.sim
+    val g = c.game
+    val e = g.election
+    Tabbed(c, Tab.CARREIRA, "Carreira", "${g.player.name} · ${sim.party.sigla}", listOf("Mandato", "Eleição")) { sel ->
+        if (sel == 0) {
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BigStat("Cargo", "${g.role.label}", Ink.gold, Modifier.weight(1f))
+                BigStat("Mandato", "${g.termNumber}º", Ink.text, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp))
+            val days = sim.dayOf(sim.electionDate) - g.day
+            LineItem("Próxima eleição", Fmt.date(sim.electionDate), sub = if (days > 0) "em $days dias" else null)
+            LineItem("Fim do mandato", "31 dez ${sim.termEndYear}")
+            LineItem("Pode disputar?", when {
+                g.rejected >= 2 -> "Não: inelegível"
+                g.termNumber >= 2 -> "Não: já foi reeleito"
+                else -> "Sim, reeleição"
+            }, if (g.rejected >= 2 || g.termNumber >= 2) Ink.coral else Ink.good)
+            SectionTitle("A escada")
+            for (r in Role.entries) {
+                val now = r == g.role
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(Shapes.tile).background(if (now) Ink.gold.copy(alpha = 0.14f) else Ink.raised).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (now) Icons.Rounded.Star else if (r.playable) Icons.Rounded.LockOpen else Icons.Rounded.Lock, null,
+                        tint = if (now) Ink.gold else Ink.faint, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(r.label, style = Type.body, color = if (now) Ink.text else Ink.muted)
+                        Text(r.desc, style = Type.small, color = Ink.faint)
+                    }
+                    if (!r.playable) Text("em breve", style = Type.small, color = Ink.faint)
+                }
+            }
+        } else {
+            Spacer(Modifier.height(6.dp))
+            if (e == null) {
+                Note("A campanha começa em 16 de agosto de ${sim.termEndYear}. Até lá, governe bem: a aprovação de cada bairro vira voto.")
+                return@Tabbed
+            }
+            val pl = e.candidates.indexOfFirst { it.player }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BigStat("Verba de campanha", Fmt.money(e.fund), Ink.gold, Modifier.weight(1f))
+                BigStat(if (e.finished) "Resultado" else "Faltam", if (e.finished) (if (e.won) "Eleito" else "Derrota") else "${(if (e.round == 1) e.runoffDay else e.day) - g.day} dias",
+                    if (e.finished && !e.won) Ink.coral else Ink.text, Modifier.weight(1f))
+            }
+            SectionTitle("Pesquisa")
+            val last = e.polls.lastOrNull() ?: e.totals.takeIf { it.isNotEmpty() }
+            if (last == null) Note("A primeira pesquisa sai em uma semana.")
+            else for (i in e.candidates.indices.sortedByDescending { last[it] }) {
+                val cand = e.candidates[i]
+                Column(Modifier.padding(vertical = 5.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(cand.name + if (cand.player) " (você)" else "", style = Type.body, color = if (cand.player) Ink.gold else Ink.text, modifier = Modifier.weight(1f), maxLines = 1)
+                        Text(sim.partyOf(cand.party).sigla, style = Type.small, color = Ink.muted)
+                        Spacer(Modifier.width(10.dp))
+                        Text(Fmt.pct(last[i]), style = Type.number, color = Ink.text)
+                    }
+                    Meter((last[i] * 100).toFloat(), Modifier.fillMaxWidth().padding(top = 4.dp), if (cand.player) Ink.gold else Ink.muted)
+                }
+            }
+            if (e.polls.size >= 2) {
+                Spacer(Modifier.height(8.dp))
+                LineChart("Sua intenção de voto", e.polls.map { (it[pl] * 100).toFloat() }, Fmt.pct(e.polls.last()[pl]))
+            }
+            if (!e.finished) {
+                SectionTitle("Campanha")
+                Btn("Propaganda na TV e nas redes · ${Fmt.money(Elections.adCost(sim))}", Modifier.fillMaxWidth(), BtnKind.PRIMARY, Icons.Rounded.Tv,
+                    enabled = e.fund >= Elections.adCost(sim) && e.boost < 6) { c.act("Propaganda no ar") { Elections.advertise(sim) } }
+                Note("Comícios: toque num bairro no mapa e escolha Comício (${Fmt.money(Elections.rallyCost(sim))}, até 2 por bairro).")
+            }
+        }
+    }
+}

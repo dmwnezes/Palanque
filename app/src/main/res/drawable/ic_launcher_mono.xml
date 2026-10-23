@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Palanque: púlpito dourado com microfone e ondas de voz -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- ondas -->
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.4" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M62,31 Q66,35 62,39" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.4" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M67,27 Q74,35 67,43" />
+    <!-- haste e microfone -->
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M54,52 L54,44 Q54,40 57,38" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54.2,31.6 a5,5 0 1,1 7.2,6.9 l-3.6,2.2 a2,2 0 0,1 -2.8,-0.8 l-1.6,-2.7 a5,5 0 0,1 0.8,-5.6 z" />
+    <!-- tampo -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M34,52 L74,52 Q76,52 76,54 L76,56 Q76,58 74,58 L34,58 Q32,58 32,56 L32,54 Q32,52 34,52 Z" />
+    <!-- corpo -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M37,58 L71,58 L66,80 L42,80 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54,58 L71,58 L66,80 L54,80 Z" />
+    <!-- base -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M40,80 L68,80 Q70,80 70,82 L70,83 L38,83 L38,82 Q38,80 40,80 Z" />
+</vector>
