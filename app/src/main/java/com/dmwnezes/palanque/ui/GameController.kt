@@ -73,14 +73,16 @@ class GameController(val sim: Sim, private val store: SaveStore, private val sco
 
     /** Nome curto da casa legislativa para a aba. */
     val houseShort get() = when {
+        sim.level == com.dmwnezes.palanque.sim.Level.PAIS -> "Congresso"
         game.role == com.dmwnezes.palanque.sim.Role.DEP_FEDERAL -> "Câmara"
+        game.role == com.dmwnezes.palanque.sim.Role.SENADOR -> "Senado"
         sim.level == com.dmwnezes.palanque.sim.Level.ESTADO -> "Assembleia"
         else -> "Câmara"
     }
 
     fun tabLabel(t: Tab) = when (t) {
         Tab.CAMARA -> houseShort
-        Tab.CIDADE -> if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) "Cidade" else "Estado"
+        Tab.CIDADE -> when (sim.level) { com.dmwnezes.palanque.sim.Level.CIDADE -> "Cidade"; com.dmwnezes.palanque.sim.Level.ESTADO -> "Estado"; else -> "País" }
         else -> t.label
     }
 

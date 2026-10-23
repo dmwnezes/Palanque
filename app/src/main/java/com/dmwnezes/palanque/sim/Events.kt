@@ -48,6 +48,8 @@ object Events {
     private fun scaled(s: Sim, perCapita: Double, min: Double = 150_000.0, max: Double = 80e6) = (s.game.pop * perCapita).coerceIn(min, max)
 
     private val NORDESTE = 21..29
+    /** eventos gerais que não fazem sentido para a Presidência */
+    private val NOT_PAIS = setOf("assaltos", "fabrica", "festival", "temporal", "apagao")
 
     val ALL: List<EventDef> = listOf(
         EventDef(
@@ -273,16 +275,17 @@ object Events {
         ),
         EventDef(
             "cassacao", "gavel", null,
-            title = { _, _ -> "Câmara vota sua cassação" },
-            text = { s, _ -> "Com aprovação de ${s.game.approval.toInt()}%, a oposição juntou assinaturas. São precisos 2/3 dos vereadores para tirar você." },
+            title = { s, _ -> if (s.level == Level.CIDADE) "Câmara vota sua cassação" else "${Camara.houseName(s.game)} vota seu impeachment" },
+            text = { s, _ -> "Com aprovação de ${s.game.approval.toInt()}%, a oposição juntou assinaturas. São precisos 2/3 dos ${s.game.role.members} para tirar você." },
             weight = { 0.0 },
             options = listOf(
                 EventOption("Ir ao plenário se defender", { _, _ -> listOf(Chip("2/3 cassam", false)) }) { s, _ ->
-                    if (Camara.impeach(s)) s.game.gameOver = GameOver("cassado", "Cassado", "A Câmara aprovou sua cassação. Você deixa a prefeitura hoje.")
+                    if (Camara.impeach(s)) s.game.gameOver = GameOver("cassado", if (s.level == Level.CIDADE) "Cassado" else "Impeachment",
+                        "${Camara.houseName(s.game)} aprovou a sua saída. Você deixa o cargo hoje.")
                     else { s.news("check", "Cassação rejeitada: você segue no cargo", 1); s.shift(-1, 3.0) }
                 },
                 EventOption("Renunciar", { _, _ -> listOf(Chip("Fim do mandato", false)) }) { s, _ ->
-                    s.game.gameOver = GameOver("renuncia", "Renúncia", "Você deixa a prefeitura antes da votação.")
+                    s.game.gameOver = GameOver("renuncia", "Renúncia", "Você deixa o cargo antes da votação.")
                 },
             ),
         ),
@@ -314,14 +317,14 @@ object Events {
         ),
         EventDef(
             "prefeito_pede", "handshake", null,
-            title = { s, e -> "Prefeito ${Fmt.ofB(s.bname(e))} pede verba" },
-            text = { s, e -> "${s.game.bairros[e.bairro].mayorName} (${s.partyOf(s.game.bairros[e.bairro].mayorParty).sigla}) quer ${Fmt.money(e.amount)} para uma obra na cidade." },
+            title = { s, e -> "${s.leaderTitle} ${Fmt.ofB(s.bname(e))} pede verba" },
+            text = { s, e -> "${s.game.bairros[e.bairro].mayorName} (${s.partyOf(s.game.bairros[e.bairro].mayorParty).sigla}) quer ${Fmt.money(e.amount)} para uma obra ${if (s.level == Level.PAIS) "no estado" else "na cidade"}." },
             level = Level.ESTADO, weight = { 0.0 },
             options = listOf(
-                EventOption("Mandar o dinheiro", { _, e -> listOf(money(e.amount), Chip("Prefeito +25", true), aprov(3.0, " na cidade")) }) { s, e ->
+                EventOption("Mandar o dinheiro", { s, e -> listOf(money(e.amount), Chip("${s.leaderTitle} +25", true), aprov(3.0, " ali")) }) { s, e ->
                     s.pay(e.amount); s.game.bairros[e.bairro].mayorRel += 25; s.shift(e.bairro, 3.0)
                 },
-                EventOption("Dizer que não há verba", { _, _ -> listOf(Chip("Prefeito −10", false)) }) { s, e -> s.game.bairros[e.bairro].mayorRel -= 10 },
+                EventOption("Dizer que não há verba", { s, _ -> listOf(Chip("${s.leaderTitle} −10", false)) }) { s, e -> s.game.bairros[e.bairro].mayorRel -= 10 },
             ),
         ),
         EventDef(
@@ -386,6 +389,90 @@ object Events {
                 EventOption("Recusar", { _, _ -> emptyList() }) { _, _ -> },
             ),
         ),
+        // ── país ──
+        EventDef(
+            "caminhoneiros", "strike", Crisis.GREVE,
+            title = { _, _ -> "Caminhoneiros param as estradas" },
+            text = { _, _ -> "Contra o preço do diesel, bloqueios em todo o país. Postos sem combustível e mercados sem comida." },
+            level = Level.PAIS, weight = { 0.6 },
+            make = { s, _ -> PendingEvent("caminhoneiros", s.game.day, amount = scaled(s, 50.0, 1e9, 20e9)) },
+            options = listOf(
+                EventOption("Subsidiar o diesel", { _, e -> listOf(money(e.amount), aprov(2.0)) }) { s, e -> s.pay(e.amount); s.shift(-1, 2.0) },
+                EventOption("Negociar o frete mínimo", { _, _ -> listOf(area(Area.ECONOMIA, -2.0), aprov(-1.0)) }) { s, _ -> s.legacy(Area.ECONOMIA, -2.0); s.shift(-1, -1.0) },
+                EventOption("Mandar desbloquear as estradas", { _, _ -> listOf(aprov(-5.0), Chip("Redes −8", false)) }) { s, _ -> s.shift(-1, -5.0); s.game.social -= 8 },
+            ),
+        ),
+        EventDef(
+            "queimadas", "tree", null,
+            title = { _, _ -> "Queimadas recordes na Amazônia" },
+            text = { _, _ -> "A fumaça chega às capitais e o mundo cobra uma resposta. Investidores ameaçam boicote." },
+            level = Level.PAIS, weight = { s -> if (s.game.ind[Area.AMBIENTE.ordinal] < 45) 0.9 else 0.4 },
+            make = { s, _ -> PendingEvent("queimadas", s.game.day, amount = scaled(s, 8.0, 1e8, 3e9)) },
+            options = listOf(
+                EventOption("Mandar o Ibama e a Força Nacional", { _, e -> listOf(money(e.amount), area(Area.AMBIENTE, 3.0), Chip("Imprensa +5", true)) }) { s, e ->
+                    s.pay(e.amount); s.legacy(Area.AMBIENTE, 3.0); s.game.press += 5
+                },
+                EventOption("Culpar os governos estaduais", { _, _ -> listOf(area(Area.AMBIENTE, -2.0), Chip("Governadores −10", false)) }) { s, _ ->
+                    s.legacy(Area.AMBIENTE, -2.0); s.game.bairros.forEach { it.mayorRel -= 10 }
+                },
+                EventOption("Dizer que é exagero", { _, _ -> listOf(area(Area.AMBIENTE, -4.0), Chip("Imprensa −10", false), area(Area.ECONOMIA, -1.0)) }) { s, _ ->
+                    s.legacy(Area.AMBIENTE, -4.0); s.game.press -= 10; s.legacy(Area.ECONOMIA, -1.0)
+                },
+            ),
+        ),
+        EventDef(
+            "juros", "chart_down", Crisis.CRISE_ECON,
+            title = { _, _ -> "Banco Central sobe os juros" },
+            text = { _, _ -> "A inflação voltou e a Selic sobe. O crédito encarece e a dívida pública pesa mais." },
+            level = Level.PAIS, weight = { 0.5 },
+            options = listOf(
+                EventOption("Criticar o Banco Central em público", { _, _ -> listOf(Chip("Redes +5", true), Chip("Imprensa −6", false), Chip("PIB −1% por 1 ano", false)) }) { s, _ ->
+                    s.game.social += 5; s.game.press -= 6; s.addEffect("pib", 12, -0.01)
+                },
+                EventOption("Cortar gastos para ajudar", { _, _ -> listOf(Chip("−5% em todas as áreas", false), Chip("Imprensa +4", true)) }) { s, _ ->
+                    for (a in Area.entries) s.setSpend(a, s.game.spend[a.ordinal] * 0.95); s.game.press += 4
+                },
+                EventOption("Ficar quieto", { _, _ -> listOf(Chip("PIB −1,5% por 1 ano", false)) }) { s, _ -> s.addEffect("pib", 12, -0.015) },
+            ),
+        ),
+        // ── mídia e esquemas (criados por Midia e Esquemas, não sorteados) ──
+        EventDef(
+            "boato", "camera", null, weight = { 0.0 },
+            title = { _, _ -> "Boato contra você viraliza" },
+            text = { _, e -> "Um vídeo editado diz que você ${e.text}. Já são milhões de visualizações." },
+            options = listOf(
+                EventOption("Desmentir com documentos", { _, _ -> listOf(Chip("Imprensa +4", true), Chip("Redes −4", false)) }) { s, _ -> s.game.press += 4; s.game.social -= 4 },
+                EventOption("Processar quem espalhou", { _, _ -> listOf(Chip("Pode virar a seu favor… ou não", false)) }) { s, _ ->
+                    if (s.rng(612).nextBoolean()) { s.game.social += 4; s.news("check", "A Justiça manda tirar o vídeo do ar", 1) }
+                    else { s.game.social -= 8; s.news("broken", "O processo dá ainda mais audiência ao boato", 2) }
+                },
+                EventOption("Ignorar", { _, _ -> listOf(Chip("Redes −9", false)) }) { s, _ -> s.game.social -= 9 },
+            ),
+        ),
+        EventDef(
+            "denuncia", "scandal", null, weight = { 0.0 },
+            title = { _, _ -> "Reportagem revela o seu esquema" },
+            text = { _, e -> "Um jornal publica documentos sobre ${e.text}. O Ministério Público abre uma investigação." },
+            options = listOf(
+                EventOption("Negar tudo", { _, _ -> listOf(Chip("Imprensa −12", false), aprov(-3.0)) }) { s, _ -> s.game.press -= 12; s.shift(-1, -3.0) },
+                EventOption("Culpar um assessor e demiti-lo", { _, _ -> listOf(Chip("Imprensa −6", false), Chip("Risco −15", true), aprov(-2.0)) }) { s, _ ->
+                    s.game.press -= 6; s.game.risk -= 15; s.shift(-1, -2.0)
+                },
+            ),
+        ),
+        EventDef(
+            "operacao", "siren", null, weight = { 0.0 },
+            title = { _, _ -> "Polícia Federal bate à sua porta" },
+            text = { s, _ -> "Operação com busca e apreensão. Com risco de ${s.game.risk.toInt()}%, as provas podem bastar para uma condenação." },
+            options = listOf(
+                EventOption("Enfrentar o processo", { s, _ -> listOf(Chip("${Esquemas.convictChance(s).let { (it * 100).toInt() }}% de condenação", false)) }) { s, _ -> Esquemas.trial(s) },
+                EventOption("Renunciar e sumir da política", { _, _ -> listOf(Chip("Inelegível por 8 anos", false), Chip("Escapa da prisão", true)) },
+                    enabled = { s, _ -> s.game.inOffice }) { s, _ -> Esquemas.resign(s) },
+                EventOption("Fazer delação premiada", { _, _ -> listOf(Chip("Fim da carreira", false)) }) { s, _ ->
+                    s.game.gameOver = GameOver("delacao", "Delação premiada", "Você entrega o esquema, devolve o dinheiro e deixa a política. Escapa da prisão, mas ninguém mais confia em você.")
+                },
+            ),
+        ),
         EventDef(
             "elogio", "trophy", null,
             title = { s, _ -> "Reportagem elogia a ${best(s).label.lowercase()} da cidade" },
@@ -412,7 +499,8 @@ object Events {
     fun spawn(s: Sim) {
         val r = s.rng(77)
         val who = if (s.governs) 0 else 1
-        val pool = ALL.filter { (it.crisis == null || it.crisis in s.game.settings.crises) && it.who == who && (it.level == null || it.level == s.level) }
+        val pool = ALL.filter { (it.crisis == null || it.crisis in s.game.settings.crises) && it.who == who &&
+                (it.level == s.level || (it.level == null && !(s.level == Level.PAIS && it.key in NOT_PAIS))) }
             .map { d -> d to (d.weight(s) * (if (d.key == "convenio") 1 + 0.5 * s.game.modifiers.count { it.key == "convenio" && it.until > s.game.day } else 1.0)) }
             .filter { it.second > 0 }
         if (pool.isEmpty()) return

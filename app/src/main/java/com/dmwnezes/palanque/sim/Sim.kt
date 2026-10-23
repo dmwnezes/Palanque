@@ -26,11 +26,13 @@ class Budget(
     val areas: DoubleArray, val admin: Double, val camara: Double, val interest: Double, val amort: Double, val upkeep: Double, val works: Double,
     /** leis em vigor e cargos comissionados */
     val laws: Double = 0.0, val cargos: Double = 0.0,
+    /** o que sai da base dos pisos (na União: repasses, Previdência e receitas extras) */
+    val pisoCut: Double = 0.0,
 ) {
     val own get() = iptu + iss + itbi
     val revenue get() = own + fpm + icms + sus + fundeb
     /** base dos pisos de saúde e educação: impostos e transferências constitucionais */
-    val taxBase get() = own + fpm + icms
+    val taxBase get() = own + fpm + icms - pisoCut
     val expense get() = areas.sum() + admin + camara + interest + amort + upkeep + works + laws + cargos
     /** gasto com pessoal do executivo (Lei de Responsabilidade Fiscal) */
     val personnel get() = areas.sum() * 0.46 + admin * 0.6
@@ -53,8 +55,12 @@ class Sim(val br: Brasil, val game: Game) {
     val city: Region = br.city(game.cityCode) ?: error("cidade ${game.cityCode} não existe")
     val state: Region = br.state(game.uf)
     /** a jurisdição: a cidade ou o estado */
-    val place: Region get() = if (level == Level.CIDADE) city else state
-    val plan: CityPlan = if (game.level == Level.CIDADE) CityPlan.build(city) else CityPlan.state(br, game.uf)
+    val place: Region get() = when (level) { Level.CIDADE -> city; Level.ESTADO -> state; Level.PAIS -> br.country }
+    val plan: CityPlan = when (game.level) {
+        Level.CIDADE -> CityPlan.build(city)
+        Level.ESTADO -> CityPlan.state(br, game.uf)
+        Level.PAIS -> CityPlan.country(br)
+    }
 
     /** Avisa a interface de cada notícia. */
     var listener: ((FeedItem) -> Unit)? = null
@@ -64,6 +70,7 @@ class Sim(val br: Brasil, val game: Game) {
 
     init {
         Fmt.plainNames = if (game.level == Level.ESTADO) game.bairros.map { it.name }.toSet() else emptySet()
+        Fmt.articles = if (game.level == Level.PAIS) br.states.associate { it.name to Fmt.stateArticle(it.code) } else emptyMap()
         // saves antigos não tinham Câmara
         if (game.camara.isEmpty() && game.bairros.isNotEmpty() && game.pop > 0) Camara.elect(this)
     }
@@ -87,18 +94,30 @@ class Sim(val br: Brasil, val game: Game) {
     val eleitores get() = game.pop * (place.stat(Stat.ELEITORES, (game.pop * 0.72).toFloat()) / place.stat(Stat.POP, game.pop.toFloat()))
 
     /** Palavras do nível: "bairro"/"município", nomes dos impostos e do governo. */
-    val unitName get() = if (level == Level.CIDADE) "bairro" else "município"
-    val unitsName get() = if (level == Level.CIDADE) "bairros" else "municípios"
-    val governmentName get() = if (level == Level.CIDADE) "Prefeitura de ${city.name}" else "Governo ${Fmt.ofState(state.code, state.name)}"
-    val execTitle get() = (if (game.role == Role.DEP_FEDERAL) Role.PRESIDENTE else game.role.governor).label.lowercase()
+    val unitName get() = when (level) { Level.CIDADE -> "bairro"; Level.ESTADO -> "município"; Level.PAIS -> "estado" }
+    val unitsName get() = unitName + "s"
+    val governmentName get() = when (level) {
+        Level.CIDADE -> "Prefeitura de ${city.name}"
+        Level.ESTADO -> "Governo ${Fmt.ofState(state.code, state.name)}"
+        Level.PAIS -> "Governo Federal"
+    }
+    val execTitle get() = game.role.governor.label.lowercase()
+    /** quem manda em cada região do mapa: prefeito (no estado) ou governador (no país) */
+    val leaderTitle get() = if (level == Level.PAIS) "Governador" else "Prefeito"
+    /** secretaria ou ministério */
+    val deptName get() = if (level == Level.PAIS) "ministério" else "secretaria"
 
     /** Grandes jurisdições constroem em lote: uma "obra" de São Paulo são várias unidades. */
-    val obraUnits: Int get() = max(1, (game.pop / (if (level == Level.CIDADE) 300_000.0 else 3_000_000.0)).roundToInt())
+    val obraUnits: Int get() = max(1, (game.pop / when (level) { Level.CIDADE -> 300_000.0; Level.ESTADO -> 3_000_000.0; Level.PAIS -> 100e6 }).roundToInt())
     val obras: List<ObraType> get() = Content.obrasFor(level)
 
     fun obraCost(t: ObraType) = t.cost * obraUnits
     fun obraServes(t: ObraType) = t.serves * obraUnits
-    val maxObras get() = if (level == Level.CIDADE) min(12, 3 + (game.pop / 60_000).toInt()) else min(14, 4 + (game.pop / 1_500_000).toInt())
+    val maxObras get() = when (level) {
+        Level.CIDADE -> min(12, 3 + (game.pop / 60_000).toInt())
+        Level.ESTADO -> min(14, 4 + (game.pop / 1_500_000).toInt())
+        Level.PAIS -> 14
+    }
     val activeObras get() = game.obras.count { !it.done }
 
     // ───────────────────────── orçamento ─────────────────────────
@@ -106,9 +125,42 @@ class Sim(val br: Brasil, val game: Game) {
     private fun mod(key: String) = game.modifiers.filter { it.key == key && it.until > game.day }.sumOf { it.value }
 
     /** Faixa e rótulos dos dois impostos ajustáveis. */
-    val taxBRange get() = if (level == Level.CIDADE) 2.0..5.0 else 17.0..23.0
-    val taxANames get() = if (level == Level.CIDADE) "IPTU" to "imposto sobre imóveis" else "IPVA" to "imposto sobre veículos"
-    val taxBNames get() = if (level == Level.CIDADE) "ISS (serviços)" to "imposto sobre serviços" else "ICMS" to "imposto sobre mercadorias (já sem a parte das prefeituras)"
+    val taxBRange get() = when (level) { Level.CIDADE -> 2.0..5.0; Level.ESTADO -> 17.0..23.0; Level.PAIS -> 7.0..12.0 }
+    val taxANames get() = when (level) {
+        Level.CIDADE -> "IPTU" to "imposto sobre imóveis"
+        Level.ESTADO -> "IPVA" to "imposto sobre veículos"
+        Level.PAIS -> "Imposto de Renda" to "pessoas e empresas"
+    }
+    val taxBNames get() = when (level) {
+        Level.CIDADE -> "ISS (serviços)" to "imposto sobre serviços"
+        Level.ESTADO -> "ICMS" to "imposto sobre mercadorias (já sem a parte das prefeituras)"
+        Level.PAIS -> "Contribuições" to "PIS, Cofins e CSLL sobre o faturamento"
+    }
+    /** alíquota padrão do imposto B ao começar */
+    val taxBDefault get() = when (level) { Level.CIDADE -> 3.0; Level.ESTADO -> 18.0; Level.PAIS -> 9.25 }
+    /** administração por habitante (máquina pública; no país inclui a Previdência) */
+    val adminPc get() = when (level) { Level.CIDADE -> 260.0; Level.ESTADO -> 220.0; Level.PAIS -> 6000.0 }
+
+    /** Receitas da tela de orçamento: nome, valor, explicação. */
+    fun revenueLines(b: Budget): List<Triple<String, Double, String?>> {
+        val (ta, tad) = taxANames
+        val (tb, tbd) = taxBNames
+        return listOf(Triple(ta, b.iptu, tad), Triple(tb, b.iss, tbd)) + when (level) {
+            Level.CIDADE -> listOf(Triple("ITBI e taxas", b.itbi, null), Triple("FPM", b.fpm, "Fundo de Participação dos Municípios"),
+                Triple("Cota do ICMS", b.icms, "parte do imposto estadual"), Triple("SUS", b.sus, "só pode ir para a saúde"), Triple("Fundeb", b.fundeb, "só pode ir para a educação"))
+            Level.ESTADO -> listOf(Triple("ITCMD", b.itbi, "imposto sobre heranças e doações"), Triple("FPE", b.fpm, "Fundo de Participação dos Estados"),
+                Triple("Outras receitas", b.icms, "royalties, taxas e serviços"), Triple("SUS", b.sus, "só pode ir para a saúde"), Triple("Fundeb", b.fundeb, "só pode ir para a educação"))
+            Level.PAIS -> listOf(Triple("IPI e IOF", b.itbi, "indústria e operações de crédito"), Triple("Previdência (INSS)", b.icms, "contribuição de quem trabalha"),
+                Triple("Outras receitas", b.fpm, "royalties do petróleo, dividendos e concessões"))
+        }
+    }
+
+    /** Nome da despesa guardada em Budget.camara. */
+    val transferName get() = when (level) {
+        Level.CIDADE -> "Repasse à Câmara"
+        Level.ESTADO -> "Repasse aos outros poderes"
+        Level.PAIS -> "Repasses a estados e municípios"
+    }
 
     fun budget(g: Game = game): Budget {
         val pop = g.pop
@@ -123,7 +175,8 @@ class Sim(val br: Brasil, val game: Game) {
         val amort = g.debt / 10
         val upkeep = g.obras.filter { it.done }.sumOf { Content.obra(it.type).cost * obraUnits * 0.06 * it.share }
         val works = g.obras.filter { !it.done }.sumOf { val t = Content.obra(it.type); t.cost * obraUnits * it.share / t.months * 12 }
-        val laws = pop * active.sumOf { it.costPc } * g.costScale * prices
+        // leis federais só custam para a União
+        val laws = pop * active.filter { level == Level.PAIS || !Laws.isFederal(it.id) }.sumOf { it.costPc } * g.costScale * prices
         val cargos = g.cargos * max(90_000.0, pop * (if (level == Level.CIDADE) 0.6 else 0.06)) * prices
         if (level == Level.CIDADE) {
             val iptu = pop * pc * 0.0035 * g.iptu * econ * propMul
@@ -135,6 +188,20 @@ class Sim(val br: Brasil, val game: Game) {
             val admin = pop * 260 * g.costScale * prices
             val camara = 0.06 * (iptu + iss + itbi + fpm + icms)
             return Budget(iptu, iss, itbi, fpm, icms, pop * 400, pop * 650, areas, admin, camara, interest, amort, upkeep, works, laws, cargos)
+        }
+        if (level == Level.PAIS) {
+            // União: IR e contribuições; metade do IR e do IPI vai para estados e municípios (FPE, FPM, Fundeb)
+            val ir = pib * 0.055 * g.iptu * econ * propMul
+            val compliance = 0.95 - (g.iss - 9.25) * 0.02
+            val contrib = pib * 0.08 * (g.iss / 9.25) * compliance * econ
+            val ipi = pib * 0.02 * econ
+            val outras = pib * 0.015
+            val inss = pib * 0.06 * econ
+            val admin = pop * adminPc * g.costScale * prices
+            val repasses = 0.5 * (ir + ipi)
+            // pisos sobre a receita corrente líquida: sem repasses, Previdência e receitas extras
+            return Budget(ir, contrib, ipi, outras, inss, 0.0, 0.0, areas, admin, repasses, interest, amort, upkeep, works, laws, cargos,
+                pisoCut = repasses + outras + inss)
         }
         // estado: ICMS é o grosso; um quarto dele vai para as prefeituras
         val ipva = pop * pc * 0.0022 * g.iptu * econ * propMul
@@ -149,20 +216,21 @@ class Sim(val br: Brasil, val game: Game) {
         return Budget(ipva, icms, itcmd, fpe, other, pop * 250, pop * 420, areas, admin, poderes, interest, amort, upkeep, works, laws, cargos)
     }
 
-    /** Pisos e teto do nível: município (15%, 25%, 54%) ou estado (12%, 25%, 49%). */
-    val healthFloor get() = if (level == Level.CIDADE) 0.15 else 0.12
-    val personnelCap get() = if (level == Level.CIDADE) 0.54 else 0.49
+    /** Pisos e teto do nível: município (15%, 25%, 54%), estado (12%, 25%, 49%) ou União (15%, 18%, 50%). */
+    val healthFloor get() = when (level) { Level.CIDADE -> 0.15; Level.ESTADO -> 0.12; Level.PAIS -> 0.15 }
+    val eduFloor get() = if (level == Level.PAIS) 0.18 else 0.25
+    val personnelCap get() = when (level) { Level.CIDADE -> 0.54; Level.ESTADO -> 0.49; Level.PAIS -> 0.50 }
 
-    class Limits(val health: Double, val education: Double, val personnel: Double, val healthFloor: Double, val personnelCap: Double) {
+    class Limits(val health: Double, val education: Double, val personnel: Double, val healthFloor: Double, val personnelCap: Double, val eduFloor: Double = 0.25) {
         val healthOk get() = health >= healthFloor
-        val educationOk get() = education >= 0.25
+        val educationOk get() = education >= eduFloor
         val personnelOk get() = personnel <= personnelCap
         val personnelAlert get() = personnel > personnelCap * 0.95
     }
 
     fun limits(): Limits {
         val b = budget()
-        return Limits(b.healthPiso / b.taxBase, b.eduPiso / b.taxBase, b.personnel / b.revenue, healthFloor, personnelCap)
+        return Limits(b.healthPiso / b.taxBase, b.eduPiso / b.taxBase, b.personnel / b.revenue, healthFloor, personnelCap, eduFloor)
     }
 
     // ───────────────────────── indicadores ─────────────────────────
@@ -189,9 +257,9 @@ class Sim(val br: Brasil, val game: Game) {
     private var sat = satisfaction()
 
     /** Termos que puxam a aprovação do governo numa região. */
-    class ApprovalParts(val services: Double, val local: Double, val need: Double, val taxes: Double, val honeymoon: Double, val late: Double, val bump: Double) {
+    class ApprovalParts(val services: Double, val local: Double, val need: Double, val taxes: Double, val honeymoon: Double, val late: Double, val bump: Double, val media: Double = 0.0) {
         /** sempre há quem apoie e quem rejeite: a soma é comprimida perto dos extremos */
-        val total get() = 50 + 42 * tanh((services + local + need + taxes + honeymoon + late + bump - 50) / 42)
+        val total get() = 50 + 42 * tanh((services + local + need + taxes + honeymoon + late + bump + media - 50) / 42)
     }
 
     fun localBonus(b: Int): Double {
@@ -204,7 +272,7 @@ class Sim(val br: Brasil, val game: Game) {
             s += 6 * share * (if (t.area == bs.need) 2 else 1)
         }
         // prefeito aliado ajuda o governador no município
-        if (level == Level.ESTADO && governs && bs.mayorRel > 20) s += 3
+        if (level != Level.CIDADE && governs && bs.mayorRel > 20) s += 3
         return min(s, 14.0)
     }
 
@@ -213,16 +281,22 @@ class Sim(val br: Brasil, val game: Game) {
     fun approvalParts(b: Int): ApprovalParts {
         val bs = game.bairros[b]
         val inTerm = game.day - game.termStart
-        val taxes = if (level == Level.CIDADE) -(game.iptu - 1) * 14 - (game.iss - 3) * 2.5 else -(game.iptu - 1) * 10 - (game.iss - 18) * 1.5
+        val taxes = when (level) {
+            Level.CIDADE -> -(game.iptu - 1) * 14 - (game.iss - 3) * 2.5
+            Level.ESTADO -> -(game.iptu - 1) * 10 - (game.iss - 18) * 1.5
+            Level.PAIS -> -(game.iptu - 1) * 12 - (game.iss - 9.25) * 2.0
+        }
         return ApprovalParts(
-            // o eleitor cobra mais do governo estadual do que da prefeitura
-            services = sat - (if (level == Level.CIDADE) 2 else 3),
+            // o eleitor cobra mais do governo estadual do que da prefeitura — e muito mais do presidente
+            services = sat - when (level) { Level.CIDADE -> 2; Level.ESTADO -> 3; Level.PAIS -> 10 },
             local = localBonus(b),
             need = (game.ind[bs.need.ordinal] - 50) * 0.15,
             taxes = taxes + mod("aprov") + lawAprov,
             honeymoon = if (governs) 6 * max(0.0, 1 - inTerm / 180.0) else 0.0,
             late = if (game.late) -12.0 else 0.0,
             bump = if (governs) bs.bump else 0.0,
+            // a imprensa e as redes só pesam para quem governa (para os outros, veja supportTarget)
+            media = if (governs) Midia.weight(game) else 0.0,
         )
     }
 
@@ -237,10 +311,16 @@ class Sim(val br: Brasil, val game: Game) {
             -1 -> (50 - game.execApproval) * 0.3
             else -> 0.0
         }
-        val mayor = if (level == Level.ESTADO && bs.mayorParty == game.player.party) 4.0 else 0.0
+        val mayor = if (level != Level.CIDADE && bs.mayorParty == game.player.party) 4.0 else 0.0
         // quem já tem mandato é conhecido: o nome aparece, o gabinete atende
-        val known = if (legislates) 8.0 else 0.0
-        return (12 + known + bs.local + game.career.capital * 0.3 + fame + stance + party.size * 6 + mayor + bs.rallies * 2.5).coerceIn(1.0, 95.0)
+        // quem acabou de deixar um cargo (ex-governador, ex-prefeito) também é conhecido
+        val last = game.career.history.lastOrNull()
+        val known = when {
+            legislates -> 8.0
+            !game.inOffice && last != null && game.day - last.to <= 730 -> if (last.role.executive) 12.0 else 8.0
+            else -> 0.0
+        }
+        return (12 + known + bs.local + game.career.capital * 0.3 + fame + stance + party.size * 6 + mayor + bs.rallies * 2.5 + Midia.weight(game) * 0.8).coerceIn(1.0, 95.0)
     }
 
     // ───────────────────────── passo diário ─────────────────────────
@@ -354,7 +434,9 @@ class Sim(val br: Brasil, val game: Game) {
 
         Camara.monthly(this)
         Legislativo.monthly(this)
-        if (level == Level.ESTADO) Mayors.monthly(this)
+        if (level != Level.CIDADE) Mayors.monthly(this)
+        Midia.monthly(this)
+        Esquemas.monthly(this)
 
         val rec = MonthRecord(g.day, g.approval, g.cash, rev, exp, g.pop)
         g.history += rec
@@ -371,7 +453,7 @@ class Sim(val br: Brasil, val game: Game) {
         val pers = if (y.months > 0) y.personnel / y.revenue else l.personnel
         val problems = buildList {
             if (l.health < healthFloor + 0.01) add("saúde perto do piso")
-            if (l.education < 0.26) add("educação perto do piso")
+            if (l.education < eduFloor + 0.01) add("educação perto do piso")
             if (pers > personnelCap * 0.97 || l.personnel > personnelCap * 0.97) add("pessoal perto do teto de ${(personnelCap * 100).roundToInt()}%")
         }
         if (problems.isEmpty()) return
@@ -404,7 +486,7 @@ class Sim(val br: Brasil, val game: Game) {
             val pers = y.personnel / y.revenue
             val fails = buildList {
                 if (health < healthFloor) add("saúde abaixo de ${(healthFloor * 100).roundToInt()}%")
-                if (edu < 0.25) add("educação abaixo de 25%")
+                if (edu < eduFloor) add("educação abaixo de ${(eduFloor * 100).roundToInt()}%")
                 if (pers > personnelCap) add("pessoal acima de ${(personnelCap * 100).roundToInt()}%")
             }
             // o Tribunal dá o parecer; quem julga é o legislativo — 2/3 da base derrubam a rejeição
@@ -457,7 +539,8 @@ class Sim(val br: Brasil, val game: Game) {
         news("person", "${s.name} deixa a secretaria de ${a.label}", 0)
     }
 
-    val debtLimit get() = budget().revenue * (if (level == Level.CIDADE) 1.2 else 2.0)
+    val debtLimitShare get() = when (level) { Level.CIDADE -> 1.2; Level.ESTADO -> 2.0; Level.PAIS -> 3.0 }
+    val debtLimit get() = budget().revenue * debtLimitShare
     val borrowLimit get() = max(0.0, min(budget().revenue * 0.16 - game.year.borrowed, debtLimit - game.debt))
 
     fun borrow(amount: Double, quiet: Boolean = false): String? {
@@ -502,6 +585,6 @@ class Sim(val br: Brasil, val game: Game) {
         LocalDate.of(year, month, 1).with(TemporalAdjusters.lastInMonth(DayOfWeek.SUNDAY))
 
     /** Último ano do mandato atual (a eleição do cargo é nesse ano). */
-    val termEndYear get() = dateOf(game.termStart).year + 3
+    val termEndYear get() = dateOf(game.termStart).year + (if (game.inOffice) game.role.years else 4) - 1
     val electionDate: LocalDate get() = firstSunday(termEndYear, 10)
 }

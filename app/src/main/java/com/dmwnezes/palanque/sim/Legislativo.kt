@@ -14,6 +14,8 @@ object Legislativo {
         return when (s.game.role) {
             Role.VEREADOR -> 0.012 * s.budget().revenue / seats
             Role.DEP_ESTADUAL -> 0.02 * s.budget().revenue / seats
+            // emendas individuais do Congresso: o senador tem um pouco mais
+            Role.SENADOR -> 45e6
             else -> 37e6
         }
     }
@@ -53,7 +55,7 @@ object Legislativo {
         bs.local = min(30.0, bs.local + gain)
         g.legacy[area.ordinal] += min(1.5, paid / (g.pop * area.ref(s.level)) * 20)
         // vereadores e deputados estaduais gastam do orçamento do governo local
-        if (g.role != Role.DEP_FEDERAL) g.cash -= paid
+        if (g.role.governor != Role.PRESIDENTE) g.cash -= paid
         g.emendas += EmendaLog(g.day, unit, area, paid)
         if (g.emendas.size > 60) g.emendas.removeAt(0)
         s.news("money", "Emenda de ${Fmt.money(paid)} para ${area.label.lowercase()} ${Fmt.inB(bs.name)}" +
@@ -162,21 +164,21 @@ object Mayors {
     fun monthly(s: Sim) {
         val g = s.game
         for (b in g.bairros) b.mayorRel += (target(s, b) - b.mayorRel) * 0.08
-        // posse dos prefeitos eleitos na eleição municipal
+        // posse dos prefeitos (eleição municipal) ou dos governadores (eleição geral)
         val d = s.date
-        if (d.monthValue == 1 && d.year % 4 == 1) {
+        if (d.monthValue == 1 && d.year % 4 == (if (s.level == Level.PAIS) 3 else 1)) {
             val r = s.rng(1357)
             val parties = g.parties.filter { !it.custom }
             for (b in g.bairros) if (r.nextDouble() < 0.45) {
                 b.mayorName = Content.personName(r); b.mayorParty = parties.random(r).id
                 b.mayorRel = target(s, b)
             }
-            s.news("flag", "Tomam posse os novos prefeitos ${Fmt.ofState(s.state.code, s.state.name)}", 0)
+            s.news("flag", if (s.level == Level.PAIS) "Tomam posse os novos governadores" else "Tomam posse os novos prefeitos ${Fmt.ofState(s.state.code, s.state.name)}", 0)
         }
         // prefeito pede verba ao governador
         if (s.governs && g.settings.randomEvents && g.events.isEmpty() && s.rng(1212).nextDouble() < 0.12) {
             val i = g.bairros.indices.maxBy { g.bairros[it].popShare * s.rng(it).nextDouble() }
-            g.events += PendingEvent("prefeito_pede", g.day, bairro = i, amount = (g.pop * g.bairros[i].popShare * 25).coerceIn(500_000.0, 60e6))
+            g.events += PendingEvent("prefeito_pede", g.day, bairro = i, amount = (g.pop * g.bairros[i].popShare * 25).coerceIn(500_000.0, if (s.level == Level.PAIS) 3e9 else 60e6))
         }
     }
 }

@@ -180,7 +180,7 @@ fun GapCard(c: GameController) {
         }
         Spacer(Modifier.height(12.dp))
         for (y in Elections.nextElections(s)) {
-            val kind = if (Elections.isMunicipal(y)) "Municipal: vereador ou prefeito" else "Geral: deputado ou governador"
+            val kind = if (Elections.isMunicipal(y)) "Municipal: vereador ou prefeito" else "Geral: deputado, senador, governador ou presidente"
             ActionRow(Icons.Rounded.HowToVote, "Esperar a eleição de $y", kind, true, active = y == Elections.nextElections(s).first()) { Elections.waitUntil(s, y); c.refresh() }
         }
         Btn("Encerrar a carreira", Modifier.fillMaxWidth().padding(top = 6.dp), BtnKind.GHOST) { Elections.retire(s); c.refresh() }

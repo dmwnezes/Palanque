@@ -159,6 +159,26 @@ class ScreensRenderTest {
         }
     }
 
+    /** Presidente: mapa do Brasil, orçamento da União, Congresso, mídia e bastidores. */
+    @Test fun president() {
+        val sim = TestBr.newSim(TestBr.FORTALEZA, role = com.dmwnezes.palanque.sim.Role.PRESIDENTE)
+        val c = GameController(sim, store(), MainScope())
+        rule.mainClock.autoAdvance = false
+        rule.setContent { PalanqueTheme { GameScreen(c, store(), {}, {}) } }
+        shot("90_presidente")
+        rule.runOnIdle {
+            sim.build("universidade", 0)
+            repeat(40) { sim.advanceDay(); sim.game.events.clear() }
+            c.select(sim.game.bairros.indices.maxBy { sim.game.bairros[it].popShare })
+        }
+        shot("91_estado")
+        val tabs = listOf(Tab.GOVERNO to 0, Tab.GOVERNO to 1, Tab.OBRAS to 0, Tab.EQUIPE to 0, Tab.CARREIRA to 2, Tab.CARREIRA to 3)
+        for ((i, tk) in tabs.withIndex()) {
+            rule.runOnIdle { c.select(-1); c.tab = tk.first; c.subTab[tk.first] = tk.second; c.refresh() }
+            shot("9${2 + i}_${tk.first.name.lowercase()}${tk.second}")
+        }
+    }
+
     /** Vereador e deputado: abas do mandato legislativo, candidatura e fora do cargo. */
     @Test fun legislator() {
         val sim = TestBr.newSim(role = com.dmwnezes.palanque.sim.Role.VEREADOR)

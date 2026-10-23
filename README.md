@@ -2,7 +2,7 @@
 
 Simulador político para Android: comece numa cidade real do Brasil e suba, mandato a mandato, da Câmara Municipal ao Palácio do Planalto. Orçamento com os pisos de saúde e educação e a Lei de Responsabilidade Fiscal, obras no mapa, secretários, crises, campanha e urna — em tempo real com pausa.
 
-**Versão 0.5:** carreira de vereador a governador. Comece como vereador, prefeito, deputado estadual, deputado federal ou governador — em qualquer cidade ou estado — e escolha o próximo degrau a cada eleição.
+**Versão 0.7:** a escada inteira, de vereador a presidente, e os atalhos: corrupção com risco de investigação, imprensa e redes, troca de partido e impeachment.
 
 ## Baixar
 
@@ -18,7 +18,11 @@ A cada envio para `main`, o GitHub Actions roda os testes, gera o APK e publica 
 - **Menu de pausa:** liga e desliga os eventos aleatórios e muda a dificuldade das eleições (fácil, normal, difícil) a qualquer momento.
 - **Governador:** o mapa do estado com os municípios reais, ICMS e IPVA, FPE, piso de saúde de 12% e teto de pessoal de 49%, obras estaduais (hospital regional, batalhão da PM, rodovia, adutora, metrô…), Assembleia Legislativa e prefeitos aliados ou rivais em cada município.
 - **Vereador e deputados:** vote os projetos do governo (orientação do partido e opinião do eleitor), proponha leis, mande emendas para o seu reduto e escolha entre base, independente e oposição. Discurso na tribuna e CPI rendem capital político. A eleição é proporcional, pelo quociente.
-- **Carreira:** em 20 de julho de cada ano de eleição você escolhe o que disputar. Municipais (2032, 2036…): vereador ou prefeito. Gerais (2030, 2034…): deputado ou governador. Mudar de nível exige deixar o cargo; perdendo, você espera a próxima eleição.
+- **Presidente:** o mapa do Brasil com os 27 estados, orçamento da União (Imposto de Renda, contribuições, INSS, repasses a estados e municípios; pisos de 15% na saúde e 18% na educação, teto de pessoal de 50%), obras federais, ministérios, Congresso com Câmara e Senado (o projeto precisa passar nas duas) e governadores da IA, que viram seus adversários na eleição. Para disputar a Presidência é preciso já ter sido governador, senador ou deputado federal.
+- **Senador:** mandato de 8 anos, eleição majoritária no estado, emendas e votações no Senado.
+- **Mídia:** imprensa (segue os fatos) e redes (rápidas, emocionais) pesam na aprovação. Entrevistas, propaganda do governo, marketing digital e boatos que viralizam.
+- **Bastidores:** superfaturar obra, propina, mesada para a base, vender emenda, caixa 2 na campanha. Cada esquema rende agora e sobe o risco; a primeira descoberta vira denúncia, a segunda vira operação da Polícia Federal (processo, renúncia ou delação). Na janela partidária (março e começo de abril dos anos de eleição) dá para trocar de partido; na oposição, com o governo abaixo de 35%, dá para abrir impeachment.
+- **Carreira:** em 20 de julho de cada ano de eleição você escolhe o que disputar. Municipais (2032, 2036…): vereador ou prefeito. Gerais (2030, 2034…): deputado, senador, governador ou presidente. Mudar de nível exige deixar o cargo; perdendo, você espera a próxima eleição.
 - **Campanha:** convenção em 20 de julho (vice e coligação, que dão verba e tempo de TV), campanha nas ruas a partir de 16 de agosto com comícios e propaganda, dois debates na TV, ataques dos adversários, pesquisas semanais com mapa de intenção de voto por bairro e segundo turno nas cidades com mais de 200 mil eleitores. Promessas feitas nos debates são cobradas dois anos depois.
 
 ## Como o projeto está organizado

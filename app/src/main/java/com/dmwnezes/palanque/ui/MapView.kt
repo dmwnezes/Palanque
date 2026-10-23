@@ -131,7 +131,11 @@ fun CityMapView(
     val neighbors = remember(place.code, sim.level) {
         val padLon = (place.lonMax - place.lonMin) * 0.8f; val padLat = (place.latMax - place.latMin) * 0.8f
         // na cidade, os municípios vizinhos; no estado, os estados vizinhos
-        val pool = if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) sim.br.cities else sim.br.states
+        val pool = when (sim.level) {
+            com.dmwnezes.palanque.sim.Level.CIDADE -> sim.br.cities
+            com.dmwnezes.palanque.sim.Level.ESTADO -> sim.br.states
+            else -> emptyList()
+        }
         pool.filter {
             it.code != place.code && it.lonMax > place.lonMin - padLon && it.lonMin < place.lonMax + padLon &&
                 it.latMax > place.latMin - padLat && it.latMin < place.latMax + padLat
@@ -140,7 +144,7 @@ fun CityMapView(
             Triple(r.name, ringsPath(rings), Geo.centroid(rings.maxBy { abs(Geo.area(it)) }))
         }
     }
-    val icons = (Content.OBRAS + Content.OBRAS_ESTADO).map { it.icon }.distinct().associateWith { rememberVectorPainter(GameIcons.of(it)) }
+    val icons = (Content.OBRAS + Content.OBRAS_ESTADO + Content.OBRAS_PAIS).map { it.icon }.distinct().associateWith { rememberVectorPainter(GameIcons.of(it)) }
     val label = rememberLabelPaint(12f)
     val small = rememberLabelPaint(10.5f, bold = false)
     val density = LocalDensity.current

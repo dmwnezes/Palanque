@@ -73,13 +73,13 @@ object Laws {
     /** Leis federais (Câmara dos Deputados): valem para todo o país, inclusive o seu estado. */
     val FEDERAL = listOf(
         LawDef("reforma_tributaria", "Isenção de IR até R$ 5 mil", "Quem ganha pouco deixa de pagar Imposto de Renda", -0.4f, 0f,
-            mapOf(Area.ECONOMIA to 3.0), aprov = 4.0),
+            mapOf(Area.ECONOMIA to 3.0), aprov = 4.0, costPc = 130.0),
         LawDef("arcabouco", "Teto de gastos mais duro", "Corta despesas para reduzir a dívida pública", 0.8f, 0f,
-            mapOf(Area.ECONOMIA to 3.0, Area.SAUDE to -2.0, Area.EDUCACAO to -2.0), aprov = -2.0),
+            mapOf(Area.ECONOMIA to 3.0, Area.SAUDE to -2.0, Area.EDUCACAO to -2.0), aprov = -2.0, costPc = -250.0),
         LawDef("piso_enfermagem", "Piso da enfermagem", "Salário mínimo nacional para enfermeiros", -0.5f, -0.1f,
-            mapOf(Area.SAUDE to 3.0), aprov = 2.0),
+            mapOf(Area.SAUDE to 3.0), aprov = 2.0, costPc = 40.0),
         LawDef("pec_seguranca", "PEC da segurança pública", "Polícia Federal e estados integrados contra o crime", 0.3f, 0.5f,
-            mapOf(Area.SEGURANCA to 4.0), aprov = 2.0),
+            mapOf(Area.SEGURANCA to 4.0), aprov = 2.0, costPc = 25.0),
         LawDef("marco_saneamento", "Novo marco do saneamento", "Metas de esgoto e concessões privadas", 0.6f, 0f,
             mapOf(Area.SANEAMENTO to 5.0), aprov = 0.5),
         LawDef("escala_6x1", "Fim da escala 6x1", "Dois dias de folga por semana para todos", -0.7f, -0.2f,
@@ -87,12 +87,19 @@ object Laws {
         LawDef("porte_armas", "Ampliar porte de armas", "Mais facilidade para o cidadão andar armado", 0.5f, 0.9f,
             mapOf(Area.SEGURANCA to 1.0), aprov = -1.0),
         LawDef("bolsa_familia", "Bolsa Família maior", "Aumenta o valor pago às famílias pobres", -0.8f, -0.2f,
-            mapOf(Area.ECONOMIA to 2.0, Area.SAUDE to 1.0), aprov = 3.0),
+            mapOf(Area.ECONOMIA to 2.0, Area.SAUDE to 1.0), aprov = 3.0, costPc = 160.0),
+        LawDef("privatiza_estatais", "Privatizar estatais", "Venda de empresas de energia e correios", 0.9f, 0f,
+            mapOf(Area.ECONOMIA to 3.0), aprov = -2.0, costPc = -60.0),
+        LawDef("mais_medicos", "Mais Médicos ampliado", "Médicos contratados para o interior", -0.4f, -0.1f,
+            mapOf(Area.SAUDE to 4.0), aprov = 2.0, costPc = 30.0),
     )
+
+    private val FEDERAL_IDS by lazy { FEDERAL.map { it.id }.toSet() }
+    fun isFederal(id: String) = id in FEDERAL_IDS
 
     /** Leis que a casa de um cargo pode votar. */
     fun forRole(r: Role) = when {
-        r == Role.DEP_FEDERAL -> FEDERAL
+        r.governor == Role.PRESIDENTE -> FEDERAL
         r.level == Level.ESTADO -> ESTADO
         else -> READY
     }
@@ -134,7 +141,8 @@ object Camara {
 
     /** Tamanho da casa do cargo. */
     fun houseSize(g: Game): Int = when {
-        g.role == Role.DEP_FEDERAL -> 513
+        g.role == Role.DEP_FEDERAL || g.level == Level.PAIS -> 513
+        g.role == Role.SENADOR -> 81
         g.level == Level.ESTADO -> assembleia(g.uf)
         else -> seats(g.pop)
     }
@@ -189,8 +197,13 @@ object Camara {
         g.camara.clear()
         g.cargos = 0
         val mine = (n * playerShare.coerceIn(0.05, 0.45)).toInt().coerceAtLeast(1)
-        repeat(n) { i ->
-            val party = if (i < mine) s.party else {
+        // o Congresso do presidente tem também os 81 senadores
+        val senators = if (g.level == Level.PAIS) 81 else 0
+        val mineSen = (senators * playerShare.coerceIn(0.05, 0.45)).toInt()
+        repeat(n + senators) { k ->
+            val sen = k >= n
+            val i = if (sen) k - n else k
+            val party = if (i < (if (sen) mineSen else mine)) s.party else {
                 val others = parties.filter { it.id != g.player.party }
                 val tot = others.sumOf { it.size.toDouble() }
                 var x = r.nextDouble() * tot
@@ -201,7 +214,7 @@ object Camara {
                 g.nextId++, Content.personName(r), party.id,
                 (party.econ + (r.nextFloat() - 0.5f) * 0.4f).coerceIn(-1f, 1f),
                 (party.social + (r.nextFloat() - 0.5f) * 0.4f).coerceIn(-1f, 1f),
-                b, 0.0,
+                b, 0.0, senator = sen,
             )
             v.relation = (target(s, v) + (r.nextDouble() - 0.5) * 20).coerceIn(-100.0, 100.0)
             g.camara += v
@@ -284,15 +297,18 @@ object Camara {
         val law = Laws.def(g, b.law)
         val r = s.rng(b.id)
         var yes = 0
-        for (v in g.camara) if (r.nextDouble() < chance(s, v, law, b.revoke, b.author)) yes++
+        var yesSen = 0
+        for (v in g.camara) if (r.nextDouble() < chance(s, v, law, b.revoke, b.author)) { yes++; if (v.senator) yesSen++ }
         var total = g.camara.size
         // você também vota quando é membro da casa
         if (s.legislates) { total++; if (b.playerVote == 1) yes++ }
         b.yes = yes; b.no = total - yes
-        val ok = yes * 2 > total
+        // no Congresso, precisa passar nas duas casas
+        val sen = g.camara.count { it.senator }
+        val ok = if (sen > 0) (yes - yesSen) * 2 > total - sen && yesSen * 2 > sen else yes * 2 > total
         b.status = if (ok) "aprovado" else "rejeitado"
         if (ok) { if (b.revoke) g.laws.remove(b.law) else g.laws += b.law }
-        val house = if (g.role == Role.DEP_FEDERAL) "Câmara dos Deputados" else if (g.level == Level.ESTADO) "Assembleia" else "Câmara"
+        val house = houseName(g)
         s.news(if (ok) "check" else "broken", (if (ok) "$house aprova" else "$house rejeita") + " \"${law.name}\": $yes a ${b.no}", if (ok) 1 else 2)
         Legislativo.afterVote(s, b, ok)
     }
@@ -336,6 +352,15 @@ object Camara {
         v.promised = g.day; v.favor += 15; v.relation = (v.relation + 15).coerceAtMost(100.0)
         g.promises += Promise(v.bairro, g.bairros[v.bairro].need, g.day + 365, vereador = v.id)
         return null
+    }
+
+    /** Nome da casa para as notícias. */
+    fun houseName(g: Game) = when {
+        g.level == Level.PAIS -> "Congresso"
+        g.role == Role.DEP_FEDERAL -> "Câmara dos Deputados"
+        g.role == Role.SENADOR -> "Senado"
+        g.level == Level.ESTADO -> "Assembleia"
+        else -> "Câmara"
     }
 
     /** Votação da cassação: 2/3 da Câmara tiram o prefeito. */

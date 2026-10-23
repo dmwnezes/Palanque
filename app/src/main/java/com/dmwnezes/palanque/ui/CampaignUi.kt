@@ -54,10 +54,10 @@ fun ConventionCard(c: GameController) {
     Overlay({}, dismissable = false) {
         Icon(Icons.Rounded.Groups, null, tint = Ink.gold, modifier = Modifier.size(40.dp).align(Alignment.CenterHorizontally))
         Text("Convenção do ${s.party.sigla}", style = Type.title.copy(fontSize = 22.sp), color = Ink.text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        Text("Sua candidatura a ${e.office.label.lowercase()}. Escolha o vice e quem sobe no palanque com você.", style = Type.body, color = Ink.muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text("Sua candidatura a ${e.office.label.lowercase()}. Escolha ${if (e.office == com.dmwnezes.palanque.sim.Role.SENADOR) "o suplente" else "o vice"} e quem sobe no palanque com você.", style = Type.body, color = Ink.muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
         Column(Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState())) {
-            Text("Vice", style = Type.label, color = Ink.muted)
+            Text(if (e.office == com.dmwnezes.palanque.sim.Role.SENADOR) "Suplente" else "Vice", style = Type.label, color = Ink.muted)
             for ((i, v) in e.viceOptions.withIndex()) {
                 val sel = i == vice
                 val p = s.partyOf(v.party)

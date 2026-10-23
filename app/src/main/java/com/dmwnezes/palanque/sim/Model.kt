@@ -8,20 +8,21 @@ val START_DATE: LocalDate = LocalDate.of(2029, 1, 1)
 
 /**
  * Áreas de governo. `ref` = gasto anual de referência por habitante (R$) num município médio;
- * `refState` = o mesmo para um governo estadual (polícia e ensino médio pesam mais).
+ * `refState` = o mesmo para um governo estadual (polícia e ensino médio pesam mais);
+ * `refPais` = União (SUS federal, universidades, programas sociais em economia).
  */
-enum class Area(val label: String, val short: String, val ref: Double, val weight: Double, val refState: Double) {
-    SAUDE("Saúde", "Saúde", 950.0, 0.20, 650.0),
-    EDUCACAO("Educação", "Educação", 1050.0, 0.17, 900.0),
-    SEGURANCA("Segurança", "Segurança", 70.0, 0.16, 450.0),
-    ECONOMIA("Economia e emprego", "Economia", 60.0, 0.16, 60.0),
-    TRANSPORTE("Transporte", "Transporte", 180.0, 0.08, 150.0),
-    SANEAMENTO("Saneamento", "Saneamento", 140.0, 0.08, 80.0),
-    CULTURA("Cultura e lazer", "Cultura", 45.0, 0.05, 30.0),
-    AMBIENTE("Meio ambiente", "Ambiente", 50.0, 0.06, 40.0),
-    TURISMO("Turismo", "Turismo", 35.0, 0.04, 25.0);
+enum class Area(val label: String, val short: String, val ref: Double, val weight: Double, val refState: Double, val refPais: Double) {
+    SAUDE("Saúde", "Saúde", 950.0, 0.20, 650.0, 1100.0),
+    EDUCACAO("Educação", "Educação", 1050.0, 0.17, 900.0, 1300.0),
+    SEGURANCA("Segurança", "Segurança", 70.0, 0.16, 450.0, 100.0),
+    ECONOMIA("Economia e emprego", "Economia", 60.0, 0.16, 60.0, 900.0),
+    TRANSPORTE("Transporte", "Transporte", 180.0, 0.08, 150.0, 200.0),
+    SANEAMENTO("Saneamento", "Saneamento", 140.0, 0.08, 80.0, 60.0),
+    CULTURA("Cultura e lazer", "Cultura", 45.0, 0.05, 30.0, 25.0),
+    AMBIENTE("Meio ambiente", "Ambiente", 50.0, 0.06, 40.0, 30.0),
+    TURISMO("Turismo", "Turismo", 35.0, 0.04, 25.0, 10.0);
 
-    fun ref(level: Level) = if (level == Level.CIDADE) ref else refState
+    fun ref(level: Level) = when (level) { Level.CIDADE -> ref; Level.ESTADO -> refState; Level.PAIS -> refPais }
 
     /** "a saúde" / "o transporte" */
     val the get() = (if (this in listOf(TRANSPORTE, SANEAMENTO, AMBIENTE, TURISMO)) "o " else "a ") + label.lowercase()
@@ -29,8 +30,8 @@ enum class Area(val label: String, val short: String, val ref: Double, val weigh
     companion object { fun refTotal(level: Level) = entries.sumOf { it.ref(level) } }
 }
 
-/** Onde o cargo atua: uma cidade (com bairros) ou um estado (com municípios). */
-enum class Level { CIDADE, ESTADO }
+/** Onde o cargo atua: uma cidade (com bairros), um estado (com municípios) ou o país (com estados). */
+enum class Level { CIDADE, ESTADO, PAIS }
 
 /**
  * Cargos. municipal = eleito nas eleições municipais (2032, 2036…); os outros nas gerais (2030, 2034…).
@@ -45,11 +46,21 @@ enum class Role(
     DEP_ESTADUAL("Deputado estadual", true, "Assembleia Legislativa", Level.ESTADO, false, false, "Assembleia Legislativa", "deputados"),
     GOVERNADOR("Governador", true, "Governa o estado", Level.ESTADO, true, false, "Assembleia Legislativa", "deputados"),
     DEP_FEDERAL("Deputado federal", true, "Câmara dos Deputados, eleito pelo estado", Level.ESTADO, false, false, "Câmara dos Deputados", "deputados"),
-    SENADOR("Senador", false, "Senado Federal · 8 anos", Level.ESTADO, false, false, "Senado Federal", "senadores"),
-    PRESIDENTE("Presidente", false, "Governa o país", Level.ESTADO, true, false, "Congresso Nacional", "parlamentares");
+    SENADOR("Senador", true, "Senado Federal, eleito pelo estado · 8 anos", Level.ESTADO, false, false, "Senado Federal", "senadores"),
+    PRESIDENTE("Presidente", true, "Governa o país com o Congresso", Level.PAIS, true, false, "Congresso Nacional", "parlamentares");
 
-    /** cargo executivo do mesmo nível (quem governa enquanto você legisla) */
-    val governor get() = if (level == Level.CIDADE) PREFEITO else if (this == DEP_FEDERAL) PRESIDENTE else GOVERNADOR
+    /** cargo executivo acima de quem legisla (quem governa enquanto você legisla) */
+    val governor get() = when {
+        level == Level.CIDADE -> PREFEITO
+        this == DEP_FEDERAL || this == SENADOR || this == PRESIDENTE -> PRESIDENTE
+        else -> GOVERNADOR
+    }
+
+    /** eleito pelo quociente (vereador e deputados); senador é majoritário */
+    val proportional get() = !executive && this != SENADOR
+
+    /** mandato em anos */
+    val years get() = if (this == SENADOR) 8 else 4
 }
 
 /** Tipos de crise que podem ser desligados no novo jogo. */
@@ -99,7 +110,7 @@ class BairroState(
     var rallies: Int = 0,
     /** apoio construído com emendas e obras do mandato legislativo (cai devagar) */
     var local: Double = 0.0,
-    /** só nos estados: prefeito do município e relação com você */
+    /** nos estados, prefeito do município; no país, governador do estado — e a relação com você */
     var mayorName: String = "",
     var mayorParty: String = "",
     var mayorRel: Double = 0.0,
@@ -189,6 +200,8 @@ class Vereador(
     var funded: Int = -1,
     var hasCargo: Boolean = false,
     var promised: Int = -1,
+    /** no Congresso: senador (true) ou deputado */
+    val senator: Boolean = false,
 )
 
 /** Lei criada pelo jogador. intensity: 1 pequena, 2 média, 3 grande; funding: 0 prefeitura paga, 1 nova taxa. */
@@ -286,7 +299,8 @@ class GameOver(val kind: String, val title: String, val text: String)
 class Game(
     val settings: Settings,
     val cityCode: Int,
-    val player: Politician,
+    /** muda na troca de partido */
+    var player: Politician,
     val parties: MutableList<Party>,
     var role: Role = Role.PREFEITO,
     var day: Int = 0,
@@ -374,6 +388,25 @@ class Game(
     var lastSpeech: Int = -999,
     var lastCpi: Int = -999,
     val emendas: MutableList<EmendaLog> = mutableListOf(),
+    // ── mídia, esquemas e manobras ──
+    /** imprensa (sóbria, segue fatos) e redes (rápidas, emocionais), 0..100 */
+    var press: Double = 50.0,
+    var social: Double = 50.0,
+    /** marketing digital contratado */
+    var marketing: Boolean = false,
+    var lastInterview: Int = -999,
+    var lastAd: Int = -999,
+    /** risco de investigação (0..100): sobe com cada esquema, cai devagar */
+    var risk: Double = 0.0,
+    /** dinheiro de esquemas guardado para a próxima campanha */
+    var caixa2: Double = 0.0,
+    var lastScheme: Int = -999,
+    /** o último esquema, para a manchete da denúncia */
+    var lastSchemeName: String = "",
+    /** 0 nada, 1 denúncia na imprensa (a próxima vira operação policial) */
+    var investigated: Int = 0,
+    var lastSwitch: Int = -9999,
+    var lastImpeach: Int = -9999,
 )
 
 /** Emenda parlamentar mandada para uma região. */

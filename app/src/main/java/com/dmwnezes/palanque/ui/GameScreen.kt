@@ -369,7 +369,7 @@ private fun BairroCard(c: GameController, b: Int) {
                 if (bs.mayorName.isNotEmpty()) {
                     val mp = c.sim.partyOf(bs.mayorParty)
                     val rel = if (bs.mayorParty == g.player.party) "do seu partido" else if (c.sim.governs) (if (bs.mayorRel > 20) "aliado" else if (bs.mayorRel < -20) "oposição" else "neutro") else ""
-                    Text("Prefeito(a): ${bs.mayorName} (${mp.sigla})" + if (rel.isNotEmpty()) " · $rel" else "", style = Type.small, color = Ink.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${c.sim.leaderTitle}(a): ${bs.mayorName} (${mp.sigla})" + if (rel.isNotEmpty()) " · $rel" else "", style = Type.small, color = Ink.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             IconBtn(Icons.Rounded.Close, size = 32.dp) { c.select(-1) }

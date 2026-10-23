@@ -225,8 +225,11 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
                     Panel(Modifier.fillMaxWidth()) {
                         Column {
                             Text("${name.trim()} · ${parties.first { it.id == party }.sigla}", style = Type.heading, color = Ink.text)
-                            Text(if (role.level == com.dmwnezes.palanque.sim.Level.CIDADE) "${role.label} de ${c.name} (${c.sigla}) · posse em 1º de janeiro de 2029"
-                                else "${role.label} ${Fmt.ofState(c.uf, br.state(c.uf).name)} · posse em 1º de janeiro de 2031 · cidade natal: ${c.name}",
+                            Text(when (role.level) {
+                                com.dmwnezes.palanque.sim.Level.CIDADE -> "${role.label} de ${c.name} (${c.sigla}) · posse em 1º de janeiro de 2029"
+                                com.dmwnezes.palanque.sim.Level.ESTADO -> "${role.label} ${Fmt.ofState(c.uf, br.state(c.uf).name)} · posse em 1º de janeiro de 2031 · cidade natal: ${c.name}"
+                                else -> "${role.label} da República · posse em 1º de janeiro de 2031 · cidade natal: ${c.name} (${c.sigla})"
+                            },
                                 style = Type.label, color = Ink.muted)
                         }
                     }

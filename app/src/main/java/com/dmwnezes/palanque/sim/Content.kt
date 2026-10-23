@@ -81,9 +81,29 @@ object Content {
         ObraType("convencoes", "Centro de convenções", Area.TURISMO, 60e6, 24, 1_000_000.0, "stage", "Feiras e congressos nacionais", Level.ESTADO),
     )
 
-    fun obrasFor(level: Level) = if (level == Level.CIDADE) OBRAS else OBRAS_ESTADO
+    /** Obras federais: bilhões, anos de prazo, atendem milhões em um estado. */
+    val OBRAS_PAIS = listOf(
+        ObraType("hosp_univ", "Hospital universitário federal", Area.SAUDE, 900e6, 30, 3e6, "hospital", "Alta complexidade e formação de médicos", Level.PAIS),
+        ObraType("policlinicas", "Rede de policlínicas do SUS", Area.SAUDE, 2.5e9, 18, 8e6, "emergency", "Especialistas e exames em várias cidades", Level.PAIS),
+        ObraType("universidade", "Universidade federal", Area.EDUCACAO, 2e9, 36, 6e6, "tech", "Novo campus com cursos e pesquisa", Level.PAIS),
+        ObraType("inst_federal", "Institutos federais", Area.EDUCACAO, 900e6, 18, 4e6, "school", "Ensino técnico em vários municípios", Level.PAIS),
+        ObraType("pf", "Superintendência da Polícia Federal", Area.SEGURANCA, 400e6, 12, 6e6, "siren", "Combate ao crime organizado e às fronteiras", Level.PAIS),
+        ObraType("presidio_federal", "Presídio federal", Area.SEGURANCA, 600e6, 24, 10e6, "gavel", "Isola os chefes das facções", Level.PAIS),
+        ObraType("energia", "Parque eólico e solar", Area.ECONOMIA, 6e9, 30, 12e6, "bolt", "Energia barata para a indústria", Level.PAIS),
+        ObraType("porto", "Porto", Area.ECONOMIA, 5e9, 36, 12e6, "factory", "Exportação e empregos", Level.PAIS),
+        ObraType("br", "Duplicação de rodovia federal", Area.TRANSPORTE, 4e9, 30, 10e6, "road", "BR duplicada entre as capitais", Level.PAIS),
+        ObraType("ferrovia", "Ferrovia", Area.TRANSPORTE, 15e9, 60, 20e6, "bus", "Carga e passageiros sobre trilhos", Level.PAIS),
+        ObraType("canal", "Canal e adutoras", Area.SANEAMENTO, 9e9, 48, 12e6, "water", "Água do rio para o sertão", Level.PAIS),
+        ObraType("moradia", "Conjuntos habitacionais", Area.SANEAMENTO, 5e9, 24, 5e6, "plant", "Casas com água e esgoto", Level.PAIS),
+        ObraType("museu", "Museu nacional", Area.CULTURA, 500e6, 24, 10e6, "theater", "Acervo, teatro e biblioteca", Level.PAIS),
+        ObraType("parque_nacional", "Parque nacional", Area.AMBIENTE, 300e6, 12, 10e6, "tree", "Floresta protegida e fiscalizada", Level.PAIS),
+        ObraType("aeroporto_int", "Aeroporto internacional", Area.TURISMO, 4e9, 36, 20e6, "stage", "Voos diretos do exterior", Level.PAIS),
+    )
 
-    fun obra(id: String) = OBRAS.firstOrNull { it.id == id } ?: OBRAS_ESTADO.first { it.id == id }
+    fun obrasFor(level: Level) = when (level) { Level.CIDADE -> OBRAS; Level.ESTADO -> OBRAS_ESTADO; Level.PAIS -> OBRAS_PAIS }
+
+    private val ALL_OBRAS by lazy { (OBRAS + OBRAS_ESTADO + OBRAS_PAIS).associateBy { it.id } }
+    fun obra(id: String) = ALL_OBRAS.getValue(id)
 
     private val FIRST = listOf(
         "Ana", "Maria", "Francisca", "Antônia", "Adriana", "Juliana", "Márcia", "Fernanda", "Patrícia", "Aline", "Sandra", "Camila",

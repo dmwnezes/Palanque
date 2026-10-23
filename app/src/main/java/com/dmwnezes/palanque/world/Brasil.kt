@@ -40,6 +40,22 @@ class Brasil(val states: List<Region>, val outline: List<FloatArray>, val cities
     fun state(uf: Int): Region = states.first { it.code == uf }
     fun citiesOf(uf: Int): List<Region> = byUf[uf].orEmpty()
 
+    /** O país: somas dos estados; taxas e índices pela média pesada pela população. Código 0. */
+    val country: Region by lazy {
+        val sums = setOf(Stat.POP, Stat.PIB, Stat.ELEITORES, Stat.AREA)
+        val st = FloatArray(Stat.entries.size) { i ->
+            val k = Stat.entries[i]
+            if (k in sums) states.sumOf { it.stat(k, 0f).toDouble() }.toFloat()
+            else {
+                val have = states.filter { !it.stat(k).isNaN() }
+                (have.sumOf { it.stat(k) * it.stat(Stat.POP, 0f).toDouble() } / have.sumOf { it.stat(Stat.POP, 0f).toDouble() }.coerceAtLeast(1.0)).toFloat()
+            }
+        }
+        st[Stat.PIB_PC.ordinal] = st[Stat.PIB.ordinal] / st[Stat.POP.ordinal]
+        st[Stat.DENS.ordinal] = st[Stat.POP.ordinal] / st[Stat.AREA.ordinal]
+        Region(0, 0, "Brasil", "BR", false, st, outline)
+    }
+
     companion object {
         fun load(input: InputStream): Brasil {
             val d = DataInputStream(input.buffered(1 shl 16))

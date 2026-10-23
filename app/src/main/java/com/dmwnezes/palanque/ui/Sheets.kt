@@ -102,7 +102,7 @@ fun GovernoSheet(c: GameController) {
                 SectionTitle("Limites da lei")
                 val l = sim.limits()
                 LimitRow("Saúde", l.health, l.healthOk, "mín. ${(l.healthFloor * 100).roundToInt()}%")
-                LimitRow("Educação", l.education, l.educationOk, "mín. 25%")
+                LimitRow("Educação", l.education, l.educationOk, "mín. ${(l.eduFloor * 100).roundToInt()}%")
                 LimitRow("Pessoal (LRF)", l.personnel, l.personnelOk, "máx. ${(l.personnelCap * 100).roundToInt()}%", l.personnelAlert)
                 Note("Conferidos no fim de cada ano pelo Tribunal de Contas. Duas rejeições deixam você inelegível." +
                     if (g.rejected > 0) " Rejeições até agora: ${g.rejected}." else "", if (g.rejected > 0) Ink.coral else Ink.muted)
@@ -116,8 +116,8 @@ fun GovernoSheet(c: GameController) {
                     ) { sim.setSpend(a, (it * 20).roundToInt() / 20.0); c.refresh() }
                 }
                 SectionTitle("Outras despesas")
-                LineItem("Administração", Fmt.money(b.admin))
-                LineItem("Repasse à Câmara", Fmt.money(b.camara))
+                LineItem(if (sim.level == com.dmwnezes.palanque.sim.Level.PAIS) "Administração e Previdência" else "Administração", Fmt.money(b.admin))
+                LineItem(sim.transferName, Fmt.money(b.camara))
                 LineItem("Manutenção das obras", Fmt.money(b.upkeep))
                 LineItem("Obras em andamento", Fmt.money(b.works))
                 LineItem("Juros e amortização", Fmt.money(b.interest + b.amort))
@@ -129,7 +129,7 @@ fun GovernoSheet(c: GameController) {
                 val (taName, taDesc) = sim.taxANames
                 val (tbName, tbDesc) = sim.taxBNames
                 val rb = sim.taxBRange
-                SliderRow(if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) Icons.Rounded.Home else Icons.Rounded.DirectionsCar, taName, g.iptu.toFloat(), 0.6f..1.6f, Fmt.money(b.iptu),
+                SliderRow(when (sim.level) { com.dmwnezes.palanque.sim.Level.CIDADE -> Icons.Rounded.Home; com.dmwnezes.palanque.sim.Level.ESTADO -> Icons.Rounded.DirectionsCar; else -> Icons.Rounded.Work }, taName, g.iptu.toFloat(), 0.6f..1.6f, Fmt.money(b.iptu),
                     hint = when { g.iptu < 0.85 -> "baixo"; g.iptu > 1.15 -> "alto"; else -> "normal" }, hintGood = g.iptu <= 1.15) {
                     sim.setIptu((it * 20).roundToInt() / 20.0); c.refresh()
                 }
@@ -139,19 +139,7 @@ fun GovernoSheet(c: GameController) {
                 }
                 Note("Imposto alto tira aprovação. Alíquota alta também aumenta a sonegação e espanta empresas.")
                 SectionTitle("De onde vem o dinheiro")
-                LineItem(taName, Fmt.money(b.iptu), sub = taDesc)
-                LineItem(tbName, Fmt.money(b.iss), sub = tbDesc)
-                if (sim.level == com.dmwnezes.palanque.sim.Level.CIDADE) {
-                    LineItem("ITBI e taxas", Fmt.money(b.itbi))
-                    LineItem("FPM", Fmt.money(b.fpm), sub = "Fundo de Participação dos Municípios")
-                    LineItem("Cota do ICMS", Fmt.money(b.icms), sub = "parte do imposto estadual")
-                } else {
-                    LineItem("ITCMD", Fmt.money(b.itbi), sub = "imposto sobre heranças e doações")
-                    LineItem("FPE", Fmt.money(b.fpm), sub = "Fundo de Participação dos Estados")
-                    LineItem("Outras receitas", Fmt.money(b.icms), sub = "royalties, taxas e serviços")
-                }
-                LineItem("SUS", Fmt.money(b.sus), sub = "só pode ir para a saúde")
-                LineItem("Fundeb", Fmt.money(b.fundeb), sub = "só pode ir para a educação")
+                for ((name, v, sub) in sim.revenueLines(b)) LineItem(name, Fmt.money(v), sub = sub)
             }
             else -> {
                 Spacer(Modifier.height(8.dp))
@@ -160,7 +148,7 @@ fun GovernoSheet(c: GameController) {
                     BigStat("Juros por ano", Fmt.money(b.interest), Ink.amber, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(10.dp))
-                LineItem("Limite total (120% da receita)", Fmt.money(sim.debtLimit))
+                LineItem("Limite total (${(sim.debtLimitShare * 100).roundToInt()}% da receita)", Fmt.money(sim.debtLimit))
                 LineItem("Pode pegar neste ano", Fmt.money(sim.borrowLimit), Ink.gold)
                 Note("Juros de 0,9% ao mês. A dívida é paga em 10 anos.")
                 Spacer(Modifier.height(10.dp))
@@ -304,8 +292,9 @@ fun EquipeSheet(c: GameController) {
     val g = c.game
     var open by remember { mutableStateOf<Area?>(g.secretarios.indexOfFirst { it == null }.takeIf { it >= 0 }?.let { Area.entries[it] }) }
     val vagas = g.secretarios.count { it == null }
-    Tabbed(c, Tab.EQUIPE, "Equipe", if (vagas > 0) "$vagas secretarias vagas" else "Secretariado completo", listOf("Secretarias")) { _ ->
-        Note("Competência deixa o dinheiro render mais. Honestidade baixa pode virar escândalo. Sem secretário a área perde 10% de eficiência.")
+    val dept = c.sim.deptName
+    Tabbed(c, Tab.EQUIPE, "Equipe", if (vagas > 0) "$vagas ${dept}s vag${if (dept == "ministério") "o" else "a"}s" else "Equipe completa", listOf(dept.replaceFirstChar { it.uppercase() } + "s")) { _ ->
+        Note("Competência deixa o dinheiro render mais. Honestidade baixa pode virar escândalo. Sem ${if (dept == "ministério") "ministro" else "secretário"} a área perde 10% de eficiência.")
         for (a in Area.entries) {
             val s = g.secretarios[a.ordinal]
             val expanded = open == a
@@ -422,7 +411,9 @@ fun CarreiraSheet(c: GameController) {
     val sim = c.sim
     val g = c.game
     val e = g.election
-    Tabbed(c, Tab.CARREIRA, "Carreira", "${g.player.name} · ${sim.party.sigla}", listOf("Mandato", "Eleição")) { sel ->
+    Tabbed(c, Tab.CARREIRA, "Carreira", "${g.player.name} · ${sim.party.sigla}", listOf("Mandato", "Eleição", "Mídia", "Bastidores")) { sel ->
+        if (sel == 2) { MidiaPane(c); return@Tabbed }
+        if (sel == 3) { BastidoresPane(c); return@Tabbed }
         if (sel == 0) {
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -455,6 +446,7 @@ fun CarreiraSheet(c: GameController) {
                         Text(r.desc, style = Type.small, color = Ink.faint)
                     }
                     if (!r.playable) Text("em breve", style = Type.small, color = Ink.faint)
+                    else if (r == Role.PRESIDENTE && !Elections.canRunForPresident(g)) Text("antes: governador, senador ou dep. federal", style = Type.small, color = Ink.faint)
                 }
             }
         } else {
@@ -475,7 +467,7 @@ fun CarreiraSheet(c: GameController) {
             }
             e.vice?.let { v ->
                 SectionTitle("Chapa")
-                LineItem("Vice", v.name, sub = sim.partyOf(v.party).sigla)
+                LineItem(if (e.office == Role.SENADOR) "Suplente" else "Vice", v.name, sub = sim.partyOf(v.party).sigla)
                 LineItem("Coligação", if (e.partners.isEmpty()) "só o ${sim.party.sigla}" else e.partners.joinToString(" · ") { sim.partyOf(it).sigla })
                 LineItem("Tempo de TV", Fmt.pct(e.tv), sub = "a propaganda rende mais com mais tempo")
                 if (Elections.incoherence(sim, e) > 0) Note("Partidos distantes na coligação tiram ${Fmt.signed(-Elections.incoherence(sim, e))} pontos.", Ink.amber)

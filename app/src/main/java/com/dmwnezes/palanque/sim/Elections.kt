@@ -74,9 +74,16 @@ object Elections {
     fun options(s: Sim, y: Int = year(s)): List<Role> {
         val g = s.game
         if (g.career.ineligibleUntil >= y) return emptyList()
-        val all = if (isMunicipal(y)) listOf(Role.VEREADOR, Role.PREFEITO) else listOf(Role.DEP_ESTADUAL, Role.DEP_FEDERAL, Role.GOVERNADOR)
-        // executivo: no máximo dois mandatos seguidos no mesmo cargo
-        return all.filter { r -> !(r.executive && g.inOffice && g.role == r && g.termNumber >= 2) }
+        val all = if (isMunicipal(y)) listOf(Role.VEREADOR, Role.PREFEITO)
+            else listOf(Role.DEP_ESTADUAL, Role.DEP_FEDERAL, Role.SENADOR, Role.GOVERNADOR, Role.PRESIDENTE)
+        // executivo: no máximo dois mandatos seguidos no mesmo cargo; a Presidência pede experiência acima do município
+        return all.filter { r -> !(r.executive && g.inOffice && g.role == r && g.termNumber >= 2) && (r != Role.PRESIDENTE || canRunForPresident(g)) }
+    }
+
+    /** Para disputar a Presidência é preciso já ter sido governador, senador, deputado federal ou presidente. */
+    fun canRunForPresident(g: Game): Boolean {
+        val big = setOf(Role.GOVERNADOR, Role.SENADOR, Role.DEP_FEDERAL, Role.PRESIDENTE)
+        return (g.inOffice && g.role in big) || g.career.history.any { it.role in big }
     }
 
     private fun openCandidacy(s: Sim) {
@@ -118,7 +125,7 @@ object Elections {
         val y = s.date.year
         val day = firstRoundDay(s, y)
         val runoffDay = s.dayOf(s.lastSunday(y, 10))
-        if (!office.executive) {
+        if (office.proportional) {
             val fund = (s.eleitores * 0.12 * (0.6 + g.partyRel / 250)).coerceAtLeast(30_000.0)
             g.election = Election(day, runoffDay, mutableListOf(Candidate(g.player.name, g.player.party, 0.0, player = true)),
                 fund = fund, phase = 0, conventionDone = true, office = office, proportional = true)
@@ -137,7 +144,14 @@ object Elections {
             cands += Candidate(if (s.rng(77).nextBoolean()) g.execName else Content.personName(r), g.execParty, 42 + (g.execApproval - 50) * 0.5 + difficultyShift(s))
             parties.removeAll { it.id == g.execParty }
         }
-        while (cands.size < n + 1) cands += Candidate(Content.personName(r), parties[cands.size - 1].id, opp - (cands.size - 1) * 5 + (r.nextDouble() - 0.5) * 8)
+        while (cands.size < n + 1) {
+            val p = parties[cands.size - 1]
+            // na Presidência, os adversários são os governadores da IA
+            val gov = if (office == Role.PRESIDENTE && s.level == Level.PAIS) g.bairros.indices.filter { g.bairros[it].mayorParty == p.id && g.bairros[it].mayorName.isNotEmpty() }
+                .maxByOrNull { g.bairros[it].popShare } else null
+            val name = gov?.let { "${g.bairros[it].mayorName} (gov. ${s.br.states[it].sigla})" } ?: Content.personName(r)
+            cands += Candidate(name, p.id, opp - (cands.size - 1) * 5 + (r.nextDouble() - 0.5) * 8 + (if (gov != null) 2.0 else 0.0))
+        }
         val e = Election(day, runoffDay, cands, fund = s.eleitores * 1.2, phase = 0, conventionDone = false, office = office)
         // três nomes para vice: do seu partido e de aliados próximos
         val near = coalitionOptions(s, e).filter { it.second }.map { it.first }
@@ -345,7 +359,8 @@ object Elections {
         e.result = by; e.totals = t; e.round = 1
         val order = t.indices.sortedByDescending { t[it] }
         val top = order[0]
-        if (t[top] > 0.5 || s.eleitores <= RUNOFF_VOTERS) finish(s, e, e.candidates[top].player)
+        // senador é eleito em turno único
+        if (t[top] > 0.5 || s.eleitores <= RUNOFF_VOTERS || !e.office.executive) finish(s, e, e.candidates[top].player)
         else {
             val pl = e.candidates.indexOfFirst { it.player }
             if (pl !in order.take(2)) finish(s, e, false)
@@ -389,7 +404,8 @@ object Elections {
         return null
     }
 
-    fun rallyCost(s: Sim) = s.eleitores * (if (s.game.election?.proportional == true) 0.02 else 0.12) * (if (s.level == Level.ESTADO) 0.1 else 1.0)
+    fun rallyCost(s: Sim) = s.eleitores * (if (s.game.election?.proportional == true) 0.02 else 0.12) *
+        when (s.level) { Level.CIDADE -> 1.0; Level.ESTADO -> 0.1; Level.PAIS -> 0.15 }
     fun adCost(s: Sim) = s.eleitores * (if (s.game.election?.proportional == true) 0.04 else 0.35)
 
     /** Propaganda na TV e nas redes: até 4 inserções; rende mais com mais tempo de TV. */
@@ -452,7 +468,7 @@ object Elections {
     }
 
     /** Novo governo da IA (prefeito, governador ou presidente). */
-    private fun newExec(s: Sim) {
+    fun newExec(s: Sim) {
         val g = s.game
         val r = s.rng(9090)
         g.execParty = g.parties.filter { !it.custom && it.id != g.player.party }.maxBy { it.size * r.nextDouble() }.id
@@ -463,7 +479,7 @@ object Elections {
     }
 
     /** O mandato acabou sem um novo cargo. */
-    private fun termEnds(s: Sim) {
+    fun termEnds(s: Sim) {
         val g = s.game
         if (g.inOffice) {
             g.career.history += CareerEntry(g.role, s.place.name, g.termStart, g.day, g.approval)

@@ -19,6 +19,7 @@ object Fmt {
         val a = abs(v)
         val sign = if (v < 0) "−" else ""
         return sign + when {
+            a >= 1e12 -> "R$ ${dec(a / 1e12, 2)} tri"
             a >= 1e9 -> "R$ ${dec(a / 1e9, if (a >= 1e11) 0 else 1)} bi"
             a >= 1e6 -> "R$ ${dec(a / 1e6, if (a >= 1e8) 0 else 1)} mi"
             a >= 1e3 -> "R$ ${(a / 1e3).roundToLong()} mil"
@@ -51,14 +52,22 @@ object Fmt {
      */
     var plainNames: Set<String> = emptySet()
 
+    /** No país, os estados levam o artigo certo: nome → "o", "a" ou "" ("no Ceará", "na Bahia", "em São Paulo"). */
+    var articles: Map<String, String> = emptyMap()
+
+    private fun art(b: String) = articles[b] ?: if (b in plainNames) "" else if (fem(b)) "a" else "o"
+
     /** "no Centro" · "na Vila Nova" · "em Sobral" */
-    fun inB(bairro: String) = if (bairro in plainNames) "em $bairro" else (if (fem(bairro)) "na " else "no ") + bairro
+    fun inB(bairro: String) = when (art(bairro)) { "a" -> "na "; "o" -> "no "; else -> "em " } + bairro
 
     /** "o Centro" · "a Vila Nova" · "Sobral" */
-    fun theB(bairro: String) = if (bairro in plainNames) bairro else (if (fem(bairro)) "a " else "o ") + bairro
+    fun theB(bairro: String) = art(bairro).let { if (it.isEmpty()) bairro else "$it $bairro" }
 
     /** "do Centro" · "da Vila Nova" · "de Sobral" */
-    fun ofB(bairro: String) = if (bairro in plainNames) "de $bairro" else (if (fem(bairro)) "da " else "do ") + bairro
+    fun ofB(bairro: String) = when (art(bairro)) { "a" -> "da "; "o" -> "do "; else -> "de " } + bairro
+
+    /** Artigo do estado: "o", "a" ou "" (mesma regra de ofState). */
+    fun stateArticle(uf: Int) = ofState(uf, "").trim().let { when (it) { "da" -> "a"; "do" -> "o"; else -> "" } }
 
     /** "do Ceará" · "da Bahia" · "de São Paulo" */
     fun ofState(uf: Int, name: String) = when (uf) {

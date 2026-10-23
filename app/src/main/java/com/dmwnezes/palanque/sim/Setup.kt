@@ -54,7 +54,7 @@ object Setup {
         val city = br.city(cityCode) ?: error("cidade $cityCode")
         val level = role.level
         val uf = cityCode / 100000
-        val region = if (level == Level.CIDADE) city else br.state(uf)
+        val region = when (level) { Level.CIDADE -> city; Level.ESTADO -> br.state(uf); Level.PAIS -> br.country }
         val r = Random(settings.seed * 31 + cityCode + role.ordinal * 7)
         val pop = region.stat(Stat.POP, 20000f).toDouble()
         val pib = region.stat(Stat.PIB).takeIf { !it.isNaN() }?.toDouble() ?: (pop * 25000)
@@ -76,6 +76,11 @@ object Setup {
             val names = Content.bairroNames(r, plan.bairros.size, rural)
             bairros = plan.bairros.indices.map { i -> BairroState(names[i], w[i] / total, 50.0, needs.random(r)) }.toMutableList()
             home = r.nextInt(bairros.size)
+        } else if (level == Level.PAIS) {
+            // os 27 estados, na ordem de Brasil.states (a mesma do mapa)
+            val tot = br.states.sumOf { it.stat(Stat.POP, 1000f).toDouble() }
+            bairros = br.states.map { BairroState(it.name, it.stat(Stat.POP, 1000f) / tot, 50.0, needs.random(r)) }.toMutableList()
+            home = br.states.indexOfFirst { it.code == uf }.coerceAtLeast(0)
         } else {
             val cities = br.citiesOf(uf)
             val tot = cities.sumOf { it.stat(Stat.POP, 1000f).toDouble() }
@@ -92,17 +97,16 @@ object Setup {
         )
         g.feed += feed
         g.pibPc0 = pib / pop
-        // alíquota modal do ICMS nos estados
-        if (level == Level.ESTADO) g.iss = 18.0
         val sim = Sim(br, g)
+        // alíquota padrão do imposto B (ISS, ICMS modal ou contribuições federais)
+        g.iss = sim.taxBDefault
         // escala de custo: no nível 1 o governo gasta 96% do que arrecada
         val b0 = sim.budget()
-        val admin = if (level == Level.CIDADE) 260 else 220
-        g.costScale = ((0.96 * b0.revenue - b0.camara) / (pop * (Area.refTotal(level) + admin))).coerceIn(0.4, 3.0)
+        g.costScale = ((0.96 * b0.revenue - b0.camara) / (pop * (Area.refTotal(level) + sim.adminPc))).coerceIn(0.4, 3.0)
         val b1 = sim.budget()
         g.cash = b1.revenue * 0.05
         g.debt = b1.revenue * (if (level == Level.CIDADE) 0.08 else 0.4)
-        if (level == Level.ESTADO) Mayors.init(sim)
+        if (level != Level.CIDADE) Mayors.init(sim)
         val execApproval = g.bairros.indices.sumOf { sim.approvalParts(it).total * g.bairros[it].popShare }
         g.execApproval = execApproval
         if (role.executive && inOffice) {
@@ -126,7 +130,11 @@ object Setup {
             for (a in Area.entries) g.pool.filter { it.area == a }.maxByOrNull { it.competence }?.let { sim.hire(it.id, quiet = true) }
         }
         if (inOffice && !role.executive) g.emendasLeft = Legislativo.emendaBudget(sim)
-        val where = if (level == Level.CIDADE) city.name else Fmt.ofState(uf, region.name).removePrefix("do ").removePrefix("da ").removePrefix("de ")
+        val where = when (level) {
+            Level.CIDADE -> city.name
+            Level.ESTADO -> Fmt.ofState(uf, region.name).removePrefix("do ").removePrefix("da ").removePrefix("de ")
+            Level.PAIS -> "Brasil"
+        }
         sim.news("flag", if (inOffice) "Posse: ${player.name}, ${role.label.lowercase()} ${if (level == Level.CIDADE) "de" else "—"} $where"
             else "${player.name} se lança candidato a ${running?.label?.lowercase()} ${if (level == Level.CIDADE) "em" else "—"} $where", 1)
         return g

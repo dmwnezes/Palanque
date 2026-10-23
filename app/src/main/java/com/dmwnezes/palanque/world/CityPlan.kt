@@ -85,6 +85,17 @@ class CityPlan(val outline: List<FloatArray>, val bairros: List<BairroShape>) {
             return CityPlan(st.rings.map { proj.ring(it) }, units)
         }
 
+        /** País: contorno real do Brasil e os 27 estados no lugar dos bairros (mesma ordem de Brasil.states). */
+        fun country(br: Brasil): CityPlan {
+            val proj = Projection.around(br.country)
+            val units = br.states.map { st ->
+                val rings = st.rings.map { proj.ring(it) }.filter { it.size >= 6 }
+                val (lx, ly) = Geo.labelPoint(rings.maxBy { abs(Geo.area(it)) })
+                BairroShape(rings, lx, ly, rings.sumOf { abs(Geo.area(it)).toDouble() }.toFloat())
+            }
+            return CityPlan(br.outline.map { proj.ring(it) }, units)
+        }
+
         /** Célula de cada semente = contorno recortado pelos semiplanos mais próximos dela. */
         private fun cells(outline: List<FloatArray>, seeds: List<FloatArray>): List<List<FloatArray>> =
             seeds.indices.map { i ->
