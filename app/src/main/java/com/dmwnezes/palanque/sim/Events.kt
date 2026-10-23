@@ -474,6 +474,20 @@ object Events {
             ),
         ),
         EventDef(
+            "levante", "siren", null, weight = { 0.0 },
+            title = { _, _ -> "O país se levanta contra o regime" },
+            text = { s, _ -> "Greve geral, quartéis divididos e milhões nas ruas. A revolta chegou a ${s.game.unrest.toInt()}%." },
+            options = listOf(
+                EventOption("Reprimir com o Exército", { s, _ -> listOf(Chip("${(Golpe.repressChance(s) * 100).toInt()}% de segurar o poder", false), aprov(-6.0)) }) { s, _ -> Golpe.repress(s) },
+                EventOption("Convocar eleições livres", { _, _ -> listOf(Chip("Fim do regime", false)) }) { s, _ ->
+                    s.game.gameOver = GameOver("transicao", "Transição", "Você entrega o poder e convoca eleições. O país volta à democracia e a história julga os seus ${Golpe.years(s)} anos de regime.")
+                },
+                EventOption("Fugir do país", { _, _ -> listOf(Chip("Exílio", false)) }) { s, _ ->
+                    s.game.gameOver = GameOver("exilio", "Exílio", "Você embarca de madrugada para o exterior. O regime cai sem você.")
+                },
+            ),
+        ),
+        EventDef(
             "elogio", "trophy", null,
             title = { s, _ -> "Reportagem elogia a ${best(s).label.lowercase()} da cidade" },
             text = { s, _ -> "Um jornal do estado mostra ${s.city.name} como exemplo." },

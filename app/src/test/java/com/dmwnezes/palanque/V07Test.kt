@@ -51,3 +51,17 @@ class V07Test {
         assertEquals("pt", s.game.player.party)
     }
 }
+
+class GolpeTest {
+    @Test fun coupEndsElectionsOrEndsGame() {
+        val s = TestBr.newSim(TestBr.FORTALEZA, 3, Role.PRESIDENTE)
+        assertTrue(Golpe.block(TestBr.newSim(TestBr.HORIZONTE, 3, Role.PREFEITO)) != null)
+        Golpe.coup(s)
+        if (s.game.gameOver != null) return
+        assertTrue(s.game.regime)
+        val end = TestBr.autoplay(s, 365 * 10, lazy = true) { _, _ -> null }
+        // nunca há eleição no regime; termina deposto, em transição, no exílio — ou ainda no poder
+        assertTrue(end.game.election == null)
+        assertTrue(end.game.regime)
+    }
+}

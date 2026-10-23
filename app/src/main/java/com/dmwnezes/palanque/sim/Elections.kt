@@ -31,6 +31,8 @@ object Elections {
         val g = s.game
         val d = s.date
         checkPromises(s)
+        // no regime de exceção não há eleição nem fim de mandato
+        if (g.regime) return
 
         if (d.year % 2 == 0 && g.election == null) {
             if (g.day == conventionDay(s, d.year) && g.running == null) openCandidacy(s)

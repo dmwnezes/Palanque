@@ -437,6 +437,7 @@ class Sim(val br: Brasil, val game: Game) {
         if (level != Level.CIDADE) Mayors.monthly(this)
         Midia.monthly(this)
         Esquemas.monthly(this)
+        Golpe.monthly(this)
 
         val rec = MonthRecord(g.day, g.approval, g.cash, rev, exp, g.pop)
         g.history += rec

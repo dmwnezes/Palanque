@@ -233,3 +233,66 @@ object Manobras {
         return null
     }
 }
+
+/** Golpe de Estado: o presidente fecha o Congresso e governa sem eleições — até o país derrubá-lo. */
+object Golpe {
+    fun block(s: Sim): String? {
+        val g = s.game
+        return when {
+            g.regime -> "O regime já está instalado"
+            !s.governs || s.level != Level.PAIS -> "Só um presidente em exercício pode tentar"
+            else -> null
+        }
+    }
+
+    /** Chance de dar certo: popularidade, base no Congresso e capital político ajudam; imprensa forte atrapalha. */
+    fun chance(s: Sim): Double {
+        val g = s.game
+        val base = g.camara.count { Camara.stance(it) > 0 }.toDouble() / g.camara.size.coerceAtLeast(1)
+        return (0.25 + (g.approval - 50) * 0.012 + (base - 0.5) * 0.6 + (g.career.capital - 20) * 0.004 - (g.press - 50) * 0.004).coerceIn(0.05, 0.85)
+    }
+
+    fun coup(s: Sim): String? {
+        block(s)?.let { return it }
+        val g = s.game
+        if (s.rng(1964).nextDouble() >= chance(s)) {
+            g.gameOver = GameOver("golpe", "Golpe fracassado", "Os quartéis não aderem e o Congresso resiste. Você é preso por tentativa de golpe de Estado.")
+            return null
+        }
+        g.regime = true; g.regimeSince = g.day; g.unrest = 20.0
+        g.election = null; g.running = null; g.candidacyPending = false
+        g.bills.filter { it.status == "tramitando" }.forEach { it.status = "retirado" }
+        // sanções internacionais e fuga de investimento
+        s.addEffect("receita", 600, -0.08); s.addEffect("pib", 600, -0.01)
+        g.press = 10.0
+        s.shift(-1, -8.0)
+        s.news("flag", "Golpe: você fecha o Congresso e suspende as eleições. Mandato sem fim", 3)
+        return null
+    }
+
+    fun years(s: Sim) = (s.game.day - s.game.regimeSince) / 365
+
+    fun repressChance(s: Sim) = (0.75 - s.game.unrest / 250).coerceIn(0.2, 0.75)
+
+    fun repress(s: Sim) {
+        val g = s.game
+        if (s.rng(2013).nextDouble() >= repressChance(s)) {
+            g.gameOver = GameOver("deposto", "Deposto", "Os militares mudam de lado. Você é derrubado depois de ${years(s)} anos de regime.")
+            return
+        }
+        g.unrest = (g.unrest - 35).coerceAtLeast(0.0)
+        g.social = (g.social - 12).coerceAtLeast(0.0)
+        s.shift(-1, -6.0)
+        s.news("siren", "O Exército dispersa os protestos. O regime resiste, por enquanto", 3)
+    }
+
+    fun monthly(s: Sim) {
+        val g = s.game
+        if (!g.regime) return
+        // imprensa censurada; a revolta cresce com o povo insatisfeito e com o tempo
+        g.press = g.press.coerceAtMost(15.0)
+        g.unrest = (g.unrest + (40 - g.approval) * 0.15 + 0.6).coerceIn(0.0, 100.0)
+        if (g.unrest >= 60 && g.events.isEmpty() && s.rng(1985).nextDouble() < 0.12 + (g.unrest - 60) / 200)
+            g.events += PendingEvent("levante", g.day)
+    }
+}

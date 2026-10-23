@@ -417,7 +417,7 @@ fun CarreiraSheet(c: GameController) {
         if (sel == 0) {
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BigStat("Cargo", if (g.inOffice) g.role.label else "Sem mandato", Ink.gold, Modifier.weight(1f))
+                BigStat("Cargo", if (g.regime) "Ditador" else if (g.inOffice) g.role.label else "Sem mandato", Ink.gold, Modifier.weight(1f))
                 BigStat("Mandato", if (g.inOffice) "${g.termNumber}º" else "—", Ink.text, Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
@@ -425,7 +425,8 @@ fun CarreiraSheet(c: GameController) {
             val eday = Elections.firstRoundDay(sim, ey)
             LineItem("Próxima eleição", "${Fmt.date(sim.dateOf(eday))} · ${if (Elections.isMunicipal(ey)) "municipal" else "geral"}",
                 sub = (eday - g.day).takeIf { it > 0 }?.let { "em $it dias" })
-            if (g.inOffice) LineItem("Fim do mandato", "31 dez ${sim.termEndYear}")
+            if (g.regime) LineItem("Fim do mandato", "sem fim", Ink.coral, sub = "regime desde ${sim.dateOf(g.regimeSince).year}")
+            else if (g.inOffice) LineItem("Fim do mandato", "31 dez ${sim.termEndYear}")
             val opts = Elections.options(sim, ey)
             LineItem("Pode disputar", if (opts.isEmpty()) (if (g.career.ineligibleUntil >= ey) "nada: inelegível" else "—") else opts.joinToString(" · ") { it.label.lowercase() },
                 if (opts.isEmpty()) Ink.coral else Ink.good)

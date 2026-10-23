@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.dmwnezes.palanque.sim.Camara
 import com.dmwnezes.palanque.sim.Esquemas
 import com.dmwnezes.palanque.sim.Fmt
+import com.dmwnezes.palanque.sim.Golpe
 import com.dmwnezes.palanque.sim.Manobras
 import com.dmwnezes.palanque.sim.Midia
 
@@ -92,6 +93,22 @@ fun BastidoresPane(c: GameController) {
         Spacer(Modifier.height(8.dp))
         Btn(pick?.let { "Filiar-se ao ${s.partyOf(it).sigla}" } ?: "Escolha o partido", Modifier.fillMaxWidth(), BtnKind.PRIMARY, Icons.Rounded.SwapHoriz,
             enabled = pick != null) { pick?.let { id -> c.act { Manobras.switchParty(s, id) } }; pick = null }
+    }
+
+    if (g.regime) {
+        SectionTitle("Regime")
+        MeterRow(Icons.Rounded.Whatshot, "Revolta", g.unrest.toFloat(), "${g.unrest.toInt()}%")
+        Note("Sem Congresso nem eleições: leis saem por decreto. A revolta sobe com a aprovação baixa e com o tempo; acima de 60% vêm os levantes.",
+            if (g.unrest >= 60) Ink.coral else Ink.muted)
+    } else if (s.governs && s.level == com.dmwnezes.palanque.sim.Level.PAIS) {
+        SectionTitle("Golpe de Estado")
+        var armed by remember { mutableStateOf(false) }
+        Note("Fechar o Congresso e suspender as eleições: mandato sem fim. Se falhar, prisão. Se der certo: sanções, censura e revolta crescente.")
+        ActionRow(Icons.Rounded.Gavel, if (armed) "Confirmar o golpe" else "Dar um golpe de Estado",
+            "${(Golpe.chance(s) * 100).toInt()}% de chance · aprovação, base no Congresso e capital ajudam; imprensa forte atrapalha" +
+                if (armed) " · toque de novo para confirmar" else "", true, danger = true) {
+            if (armed) c.act { Golpe.coup(s) } else { armed = true; c.refresh() }
+        }
     }
 
     if (s.legislates) {

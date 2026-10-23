@@ -407,6 +407,12 @@ class Game(
     var investigated: Int = 0,
     var lastSwitch: Int = -9999,
     var lastImpeach: Int = -9999,
+    // ── golpe ──
+    /** governo de exceção: sem eleições nem Congresso, até cair */
+    var regime: Boolean = false,
+    var regimeSince: Int = 0,
+    /** revolta acumulada contra o regime (0..100) */
+    var unrest: Double = 0.0,
 )
 
 /** Emenda parlamentar mandada para uma região. */

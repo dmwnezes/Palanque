@@ -228,7 +228,7 @@ object Camara {
             v.favor *= 0.9
             v.relation += (target(s, v) - v.relation) * 0.12
         }
-        if (!s.governs) return
+        if (!s.governs || g.regime) return
         // CPI quando a oposição domina
         val opp = g.camara.count { stance(it) < 0 }
         if (g.settings.randomEvents && opp * 2 > g.camara.size && g.events.isEmpty() && s.rng(808).nextDouble() < 0.05)
@@ -278,6 +278,12 @@ object Camara {
     /** Envia um projeto; a votação acontece em 30 dias. */
     fun send(s: Sim, lawId: String, revoke: Boolean = false): String? {
         val g = s.game
+        if (g.regime) {
+            // Congresso fechado: a lei sai por decreto
+            if (revoke) g.laws.remove(lawId) else if (lawId !in g.laws) g.laws += lawId
+            s.news("gavel", "Decreto: ${if (revoke) "revogada" else "em vigor"} \"${Laws.def(g, lawId).name}\"", 1)
+            return null
+        }
         if (pending(s) != null) return "Já há um projeto seu em votação"
         if (!revoke && lawId in g.laws) return "Essa lei já está em vigor"
         g.bills += Bill(g.nextId++, lawId, g.day, g.day + 30, revoke)
