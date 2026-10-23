@@ -93,6 +93,35 @@ class SimulationTest {
         }
     }
 
+    @Test fun camara() {
+        val s = TestBr.newSim()
+        val g = s.game
+        assertEquals(17, g.camara.size) // Horizonte: 80 a 120 mil habitantes
+        assertEquals(9, com.dmwnezes.palanque.sim.Camara.seats(5000.0))
+        assertEquals(55, com.dmwnezes.palanque.sim.Camara.seats(12e6))
+        val C = com.dmwnezes.palanque.sim.Camara
+        assertEquals(null, C.send(s, "escola_integral"))
+        assertNotNull("só um projeto por vez", C.send(s, "tarifa_zero"))
+        // negociar com todo mundo garante a maioria
+        val bill = C.pending(s)!!
+        for (v in g.camara) { C.talk(s, v, bill.id); C.cargo(s, v) }
+        repeat(31) { s.advanceDay(); g.events.clear() }
+        assertEquals("aprovado", g.bills.first().status)
+        assertTrue("escola_integral" in g.laws)
+        assertTrue(s.budget().laws > 0 && s.budget().cargos > 0)
+        assertTrue(s.lawEffect(Area.EDUCACAO) > 0)
+        // revogar
+        assertEquals(null, C.send(s, "escola_integral", revoke = true))
+        repeat(31) { s.advanceDay(); g.events.clear() }
+        assertTrue(g.bills.last().status != "tramitando")
+    }
+
+    @Test fun randomEventsOff() {
+        val s = TestBr.newSim()
+        s.game.settings.randomEvents = false
+        repeat(1200) { s.advanceDay(); assertTrue("evento ${s.game.events.firstOrNull()?.key}", s.game.events.all { it.key == "eleicao_geral" || it.key == "cassacao" }); s.game.events.clear() }
+    }
+
     @Test fun saveRoundTrip() {
         val s = TestBr.newSim()
         repeat(400) { s.advanceDay(); s.game.events.clear() }

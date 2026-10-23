@@ -228,8 +228,43 @@ object Events {
             text = { _, _ -> "O projeto chega para sanção. A população acompanha pelas redes." },
             weight = { 0.5 },
             options = listOf(
-                EventOption("Vetar", { _, _ -> listOf(aprov(3.0), Chip("Vereadores irritados", false)) }) { s, _ -> s.shift(-1, 3.0) },
-                EventOption("Sancionar", { _, _ -> listOf(aprov(-4.0)) }) { s, _ -> s.shift(-1, -4.0) },
+                EventOption("Vetar", { _, _ -> listOf(aprov(3.0), Chip("Câmara −10", false)) }) { s, _ ->
+                    s.shift(-1, 3.0); s.game.camara.forEach { it.favor -= 10; it.relation -= 10 }
+                },
+                EventOption("Sancionar", { _, _ -> listOf(aprov(-4.0), Chip("Câmara +6", true)) }) { s, _ ->
+                    s.shift(-1, -4.0); s.game.camara.forEach { it.favor += 6; it.relation += 6 }
+                },
+            ),
+        ),
+        EventDef(
+            "cpi", "gavel", null,
+            title = { _, _ -> "Oposição abre CPI contra a prefeitura" },
+            text = { _, _ -> "A maioria da Câmara quer investigar os contratos do seu governo." },
+            weight = { 0.0 },
+            options = listOf(
+                EventOption("Colaborar com a investigação", { _, _ -> listOf(aprov(-2.0)) }) { s, _ -> s.shift(-1, -2.0) },
+                EventOption("Negociar com o centrão", { _, _ -> listOf(Chip("+2 cargos comissionados", false), Chip("Independentes +15", true)) }) { s, _ ->
+                    s.game.cargos += 2
+                    s.game.camara.filter { Camara.stance(it) == 0 }.forEach { it.favor += 15; it.relation += 15 }
+                },
+                EventOption("Atacar a oposição nas redes", { _, _ -> listOf(aprov(1.0), Chip("Oposição −15", false)) }) { s, _ ->
+                    s.shift(-1, 1.0); s.game.camara.filter { Camara.stance(it) < 0 }.forEach { it.favor -= 15; it.relation -= 15 }
+                },
+            ),
+        ),
+        EventDef(
+            "cassacao", "gavel", null,
+            title = { _, _ -> "Câmara vota sua cassação" },
+            text = { s, _ -> "Com aprovação de ${s.game.approval.toInt()}%, a oposição juntou assinaturas. São precisos 2/3 dos vereadores para tirar você." },
+            weight = { 0.0 },
+            options = listOf(
+                EventOption("Ir ao plenário se defender", { _, _ -> listOf(Chip("2/3 cassam", false)) }) { s, _ ->
+                    if (Camara.impeach(s)) s.game.gameOver = GameOver("cassado", "Cassado", "A Câmara aprovou sua cassação. Você deixa a prefeitura hoje.")
+                    else { s.news("check", "Cassação rejeitada: você segue no cargo", 1); s.shift(-1, 3.0) }
+                },
+                EventOption("Renunciar", { _, _ -> listOf(Chip("Fim do mandato", false)) }) { s, _ ->
+                    s.game.gameOver = GameOver("renuncia", "Renúncia", "Você deixa a prefeitura antes da votação.")
+                },
             ),
         ),
         EventDef(

@@ -15,7 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-enum class Tab(val label: String) { GOVERNO("Governo"), OBRAS("Obras"), EQUIPE("Equipe"), CIDADE("Cidade"), CARREIRA("Carreira") }
+enum class Tab(val label: String) { GOVERNO("Governo"), OBRAS("Obras"), CAMARA("Câmara"), EQUIPE("Equipe"), CIDADE("Cidade"), CARREIRA("Carreira") }
 
 enum class Layer(val label: String) { APROVACAO("Aprovação"), POPULACAO("População"), OBRAS("Obras"), VOTOS("Votos") }
 

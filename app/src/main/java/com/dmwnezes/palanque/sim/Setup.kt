@@ -76,6 +76,7 @@ object Setup {
         for (i in g.bairros.indices) g.bairros[i].approval = (sim.approvalParts(i).total + (r.nextDouble() - 0.5) * 8).coerceIn(15.0, 85.0)
         g.approval = g.bairros.sumOf { it.approval * it.popShare }
         refreshPool(sim)
+        Camara.elect(sim)
         sim.news("flag", "Posse em ${city.name}: começa o mandato de ${player.name}", 1)
         return g
     }

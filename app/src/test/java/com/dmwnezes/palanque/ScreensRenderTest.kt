@@ -83,17 +83,22 @@ class ScreensRenderTest {
             sim.build("ubs", 0); sim.build("escola", 1); sim.build("praca", 2)
             repeat(320) { sim.advanceDay(); sim.game.events.clear() }
             sim.build("base_gm", 0)
+            com.dmwnezes.palanque.sim.Camara.send(sim, "tarifa_zero")
+            repeat(31) { sim.advanceDay(); sim.game.events.clear() }
+            com.dmwnezes.palanque.sim.Camara.send(sim, "alvara_na_hora")
             c.select(0)
         }
         shot("11_bairro")
         for ((i, t) in Tab.entries.withIndex()) {
-            val subs = when (t) { Tab.GOVERNO, Tab.OBRAS -> 3; Tab.CIDADE -> 4; Tab.CARREIRA -> 2; else -> 1 }
+            val subs = when (t) { Tab.GOVERNO, Tab.OBRAS, Tab.CAMARA -> 3; Tab.CIDADE -> 4; Tab.CARREIRA -> 2; else -> 1 }
             for (k in 0 until subs) {
                 rule.runOnIdle { c.select(-1); c.tab = t; c.subTab[t] = k; c.refresh() }
                 shot("2${i}${k}_${t.name.lowercase()}")
             }
         }
-        rule.runOnIdle { c.tab = null; c.layer = Layer.POPULACAO; c.refresh() }
+        rule.runOnIdle { c.tab = null; c.showSettings = true; c.refresh() }
+        shot("29_menu")
+        rule.runOnIdle { c.showSettings = false; c.layer = Layer.POPULACAO; c.refresh() }
         shot("30_camada_populacao")
         rule.runOnIdle { c.layer = Layer.OBRAS; c.refresh() }
         shot("31_camada_obras")

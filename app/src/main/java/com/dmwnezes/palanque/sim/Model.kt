@@ -55,7 +55,12 @@ data class Party(
 data class Politician(val name: String, val party: String)
 
 @Serializable
-class Settings(val crises: MutableSet<Crisis> = Crisis.entries.toMutableSet(), val seed: Long = 2029L)
+class Settings(
+    val crises: MutableSet<Crisis> = Crisis.entries.toMutableSet(),
+    val seed: Long = 2029L,
+    /** eventos aleatórios ligados (pode mudar no menu de pausa) */
+    var randomEvents: Boolean = true,
+)
 
 /** Estado de cada bairro (a geometria é gerada de novo a partir do código da cidade). */
 @Serializable
@@ -120,7 +125,45 @@ class TimedEffect(val key: String, val until: Int, val value: Double, val area: 
 
 /** Promessa feita a um bairro: obra de um tipo até uma data. */
 @Serializable
-class Promise(val bairro: Int, val area: Area, val until: Int, var kept: Boolean = false)
+class Promise(val bairro: Int, val area: Area, val until: Int, var kept: Boolean = false, val vereador: Int = -1)
+
+/** Vereador: partido, ideologia, reduto eleitoral e relação com o prefeito (−100 a +100). */
+@Serializable
+class Vereador(
+    val id: Int,
+    val name: String,
+    val party: String,
+    val econ: Float,
+    val social: Float,
+    /** bairro onde tem mais votos */
+    val bairro: Int,
+    var relation: Double,
+    /** favores recebidos (emenda, cargo, obra prometida), que somem com o tempo */
+    var favor: Double = 0.0,
+    /** último projeto em que já houve conversa, emenda ou cargo */
+    var talked: Int = -1,
+    var funded: Int = -1,
+    var hasCargo: Boolean = false,
+    var promised: Int = -1,
+)
+
+/** Lei criada pelo jogador. intensity: 1 pequena, 2 média, 3 grande; funding: 0 prefeitura paga, 1 nova taxa. */
+@Serializable
+class CustomLaw(val id: String, val name: String, val area: Area, val intensity: Int, val ideo: Float, val funding: Int)
+
+/** Projeto de lei na Câmara. */
+@Serializable
+class Bill(
+    val id: Int,
+    val law: String,
+    val sentDay: Int,
+    val voteDay: Int,
+    /** revogar uma lei em vigor em vez de criar */
+    val revoke: Boolean = false,
+    var status: String = "tramitando",
+    var yes: Int = 0,
+    var no: Int = 0,
+)
 
 /** Totais do ano corrente, para conferir pisos e Lei de Responsabilidade Fiscal. */
 @Serializable
@@ -215,4 +258,11 @@ class Game(
     var rejected: Int = 0,
     var election: Election? = null,
     var gameOver: GameOver? = null,
+    val camara: MutableList<Vereador> = mutableListOf(),
+    val bills: MutableList<Bill> = mutableListOf(),
+    /** leis em vigor (ids de Laws.READY ou de customLaws) */
+    val laws: MutableList<String> = mutableListOf(),
+    val customLaws: MutableList<CustomLaw> = mutableListOf(),
+    /** cargos comissionados dados a vereadores */
+    var cargos: Int = 0,
 )

@@ -80,6 +80,7 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
     var query by remember { mutableStateOf("") }
     val crises = remember { Crisis.entries.toMutableSet() }
     var crisisTick by remember { mutableIntStateOf(0) }
+    var randomEvents by remember { mutableStateOf(true) }
 
     val titles = listOf("Quem é você", "Por onde começar", "Escolha o estado", "Escolha a cidade", "Últimos ajustes")
     val canNext = when (step) {
@@ -225,6 +226,8 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
                         }
                     }
                     Spacer(Modifier.height(16.dp))
+                    ToggleRow("Eventos aleatórios", randomEvents, sub = "Dá para mudar depois no menu de pausa") { randomEvents = it }
+                    Spacer(Modifier.height(8.dp))
                     Text("Crises que podem acontecer", style = Type.label, color = Ink.muted)
                     for (cr in Crisis.entries) ToggleRow(cr.label, cr in crises) { on -> if (on) crises += cr else crises -= cr; crisisTick++ }
                 }
@@ -234,7 +237,7 @@ fun NewGameFlow(br: Brasil, onBack: () -> Unit, onStart: (Settings, Int, Politic
             Btn(if (step == 4) "Tomar posse" else "Continuar", Modifier.fillMaxWidth(), BtnKind.PRIMARY,
                 if (step == 4) Icons.Rounded.Flag else null, enabled = canNext) {
                 if (step < 4) step++
-                else onStart(Settings(crises.toMutableSet(), System.currentTimeMillis() % 100000), city, Politician(name.trim(), party), parties)
+                else onStart(Settings(crises.toMutableSet(), System.currentTimeMillis() % 100000, randomEvents), city, Politician(name.trim(), party), parties)
             }
         }
     }

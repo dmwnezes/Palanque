@@ -42,7 +42,7 @@ import com.dmwnezes.palanque.world.Stat
 import kotlin.math.roundToInt
 
 @Composable
-private fun Tabbed(c: GameController, tab: Tab, title: String, sub: String?, tabs: List<String>, content: @Composable ColumnScope.(Int) -> Unit) {
+internal fun Tabbed(c: GameController, tab: Tab, title: String, sub: String?, tabs: List<String>, content: @Composable ColumnScope.(Int) -> Unit) {
     @Suppress("UNUSED_EXPRESSION") c.tick
     val sel = (c.subTab[tab] ?: 0).coerceIn(0, tabs.lastIndex)
     Column(Modifier.fillMaxSize()) {
@@ -52,12 +52,12 @@ private fun Tabbed(c: GameController, tab: Tab, title: String, sub: String?, tab
 }
 
 @Composable
-private fun Note(text: String, color: Color = Ink.muted) {
+internal fun Note(text: String, color: Color = Ink.muted) {
     Text(text, style = Type.small, color = color, modifier = Modifier.padding(vertical = 4.dp))
 }
 
 @Composable
-private fun LineItem(label: String, value: String, color: Color = Ink.text, sub: String? = null) {
+internal fun LineItem(label: String, value: String, color: Color = Ink.text, sub: String? = null) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(label, style = Type.body, color = Ink.text)
@@ -121,6 +121,8 @@ fun GovernoSheet(c: GameController) {
                 LineItem("Manutenção das obras", Fmt.money(b.upkeep))
                 LineItem("Obras em andamento", Fmt.money(b.works))
                 LineItem("Juros e amortização", Fmt.money(b.interest + b.amort))
+                if (b.laws > 0) LineItem("Leis em vigor", Fmt.money(b.laws))
+                if (b.cargos > 0) LineItem("Cargos comissionados (${g.cargos})", Fmt.money(b.cargos))
             }
             1 -> {
                 Spacer(Modifier.height(8.dp))

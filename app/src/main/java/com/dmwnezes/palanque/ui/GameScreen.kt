@@ -153,6 +153,7 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
                         when (c.tab) {
                             Tab.GOVERNO -> GovernoSheet(c)
                             Tab.OBRAS -> ObrasSheet(c)
+                            Tab.CAMARA -> CamaraSheet(c)
                             Tab.EQUIPE -> EquipeSheet(c)
                             Tab.CIDADE -> CidadeSheet(c)
                             Tab.CARREIRA -> CarreiraSheet(c)
@@ -293,6 +294,7 @@ fun Dock(c: GameController, inSheet: Boolean = false) {
     val icons = mapOf(
         Tab.GOVERNO to Icons.Rounded.AccountBalance,
         Tab.OBRAS to Icons.Rounded.Construction,
+        Tab.CAMARA to Icons.Rounded.Gavel,
         Tab.EQUIPE to Icons.Rounded.Badge,
         Tab.CIDADE to Icons.Rounded.LocationCity,
         Tab.CARREIRA to Icons.Rounded.HowToVote,
@@ -306,6 +308,7 @@ fun Dock(c: GameController, inSheet: Boolean = false) {
             val sel = c.tab == t
             val badge = when (t) {
                 Tab.EQUIPE -> c.game.secretarios.count { it == null }
+                Tab.CAMARA -> if (c.game.bills.any { it.status == "tramitando" }) 1 else 0
                 Tab.CARREIRA -> if (c.game.election?.let { !it.finished } == true) 1 else 0
                 else -> 0
             }
@@ -498,6 +501,10 @@ private fun SettingsOverlay(c: GameController, store: SaveStore, onExit: () -> U
         Spacer(Modifier.height(8.dp))
         ToggleRow("Som", sound, Icons.AutoMirrored.Rounded.VolumeUp) { sound = it; fb?.sound = it }
         ToggleRow("Vibração", vib, Icons.Rounded.Vibration) { vib = it; fb?.vibration = it }
+        var events by remember { mutableStateOf(c.game.settings.randomEvents) }
+        ToggleRow("Eventos aleatórios", events, Icons.Rounded.Casino, sub = "Crises, pedidos e notícias que pedem decisão") {
+            events = it; c.game.settings.randomEvents = it; c.refresh()
+        }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Btn("Atualização", Modifier.weight(1f), icon = Icons.Rounded.SystemUpdate) { showUpdate = true }

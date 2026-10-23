@@ -155,7 +155,10 @@ object Elections {
             g.termStart = g.day + 1
             g.election = null
             g.bairros.forEach { it.rallies = 0 }
-            s.news("flag", "Posse do segundo mandato", 1)
+            // a nova Câmara acompanha a sua votação
+            val pl = e.candidates.indexOfFirst { it.player }
+            Camara.elect(s, e.totals.getOrElse(pl) { 0.3 } * 0.45)
+            s.news("flag", "Posse do segundo mandato e da nova Câmara", 1)
         } else {
             g.gameOver = GameOver("derrota", "Fim do mandato",
                 "Você entrega a prefeitura em 1º de janeiro. Em breve dará para recomeçar num cargo menor — vereador ou secretário.")

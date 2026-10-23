@@ -20,12 +20,14 @@ import kotlin.random.Random
 class Budget(
     val iptu: Double, val iss: Double, val itbi: Double, val fpm: Double, val icms: Double, val sus: Double, val fundeb: Double,
     val areas: DoubleArray, val admin: Double, val camara: Double, val interest: Double, val amort: Double, val upkeep: Double, val works: Double,
+    /** leis em vigor e cargos comissionados */
+    val laws: Double = 0.0, val cargos: Double = 0.0,
 ) {
     val own get() = iptu + iss + itbi
     val revenue get() = own + fpm + icms + sus + fundeb
     /** base dos pisos de saúde e educação: impostos e transferências constitucionais */
     val taxBase get() = own + fpm + icms
-    val expense get() = areas.sum() + admin + camara + interest + amort + upkeep + works
+    val expense get() = areas.sum() + admin + camara + interest + amort + upkeep + works + laws + cargos
     /** gasto com pessoal do executivo (Lei de Responsabilidade Fiscal) */
     val personnel get() = areas.sum() * 0.52 + admin * 0.6
     /** o que conta para o piso: saúde sem o dinheiro do SUS, educação sem metade do Fundeb */
@@ -43,6 +45,9 @@ class Sim(val br: Brasil, val game: Game) {
 
     /** Avisa a interface de cada notícia. */
     var listener: ((FeedItem) -> Unit)? = null
+
+    // saves da versão 0.1 não tinham Câmara
+    init { if (game.camara.isEmpty() && game.bairros.isNotEmpty() && game.pop > 0) Camara.elect(this) }
 
     val date: LocalDate get() = START_DATE.plusDays(game.day.toLong())
     fun dateOf(day: Int): LocalDate = START_DATE.plusDays(day.toLong())
@@ -74,7 +79,8 @@ class Sim(val br: Brasil, val game: Game) {
         val pib = g.pib
         val econ = 1.0 + mod("receita")
         val pc = pib / pop
-        val iptu = pop * pc * 0.0035 * g.iptu * econ
+        val active = g.laws.map { Laws.def(g, it) }
+        val iptu = pop * pc * 0.0035 * g.iptu * econ * active.fold(1.0) { a, l -> a * l.iptuMul }
         val compliance = 0.92 - (g.iss - 2.0) * 0.035
         val iss = pib * 0.45 * g.iss / 100 * compliance * econ
         val itbi = pib * 0.0018 * econ
@@ -90,7 +96,9 @@ class Sim(val br: Brasil, val game: Game) {
         val amort = g.debt / 10
         val upkeep = g.obras.filter { it.done }.sumOf { Content.obra(it.type).cost * obraUnits * 0.06 * it.share }
         val works = g.obras.filter { !it.done }.sumOf { val t = Content.obra(it.type); t.cost * obraUnits * it.share / t.months * 12 }
-        return Budget(iptu, iss, itbi, fpm, icms, sus, fundeb, areas, admin, camara, interest, amort, upkeep, works)
+        val laws = pop * active.sumOf { it.costPc } * g.costScale * prices
+        val cargos = g.cargos * max(90_000.0, pop * 0.6) * prices
+        return Budget(iptu, iss, itbi, fpm, icms, sus, fundeb, areas, admin, camara, interest, amort, upkeep, works, laws, cargos)
     }
 
     /** Situação dos limites da lei no ano até agora (ou no ritmo atual, se o ano acabou de começar). */
@@ -118,9 +126,11 @@ class Sim(val br: Brasil, val game: Game) {
     fun spendEffect(a: Area) = 26 * tanh(1.6 * (game.spend[a.ordinal] * efficiency(a) - 1))
     fun obraEffect(a: Area) = 22 * (1 - exp(-coverage(a) / game.pop * 1.2))
 
+    fun lawEffect(a: Area) = game.laws.sumOf { Laws.def(game, it).ind[a] ?: 0.0 }
+
     fun target(a: Area): Double {
         val i = a.ordinal
-        return (game.base[i] + spendEffect(a) + obraEffect(a) + game.legacy[i] + mod("ind_${a.name}")).coerceIn(2.0, 98.0)
+        return (game.base[i] + spendEffect(a) + obraEffect(a) + game.legacy[i] + lawEffect(a) + mod("ind_${a.name}")).coerceIn(2.0, 98.0)
     }
 
     /** Satisfação geral com os serviços (0..100). */
@@ -151,7 +161,7 @@ class Sim(val br: Brasil, val game: Game) {
             services = satisfaction() - 2,
             local = localBonus(b),
             need = (game.ind[bs.need.ordinal] - 50) * 0.15,
-            taxes = -(game.iptu - 1) * 14 - (game.iss - 3) * 2.5 + mod("aprov"),
+            taxes = -(game.iptu - 1) * 14 - (game.iss - 3) * 2.5 + mod("aprov") + game.laws.sumOf { Laws.def(game, it).aprov },
             honeymoon = 6 * max(0.0, 1 - inTerm / 180.0),
             late = if (game.late) -12.0 else 0.0,
             bump = bs.bump,
@@ -186,7 +196,8 @@ class Sim(val br: Brasil, val game: Game) {
         if (today.monthValue != before.monthValue) closeMonth(before)
         if (today.year != before.year) closeYear(before.year)
         Elections.tick(this)
-        if (g.events.isEmpty() && g.day >= g.nextEventDay && g.election?.let { !it.finished } != true) {
+        Camara.pending(this)?.let { if (g.day >= it.voteDay) Camara.vote(this, it) }
+        if (g.settings.randomEvents && g.events.isEmpty() && g.day >= g.nextEventDay && g.election?.let { !it.finished } != true) {
             Events.spawn(this)
             g.nextEventDay = g.day + 24 + rng(5).nextInt(30)
         }
@@ -229,16 +240,19 @@ class Sim(val br: Brasil, val game: Game) {
         for (s in g.secretarios) s?.let {
             it.monthsInOffice++
             // secretário desonesto pode virar escândalo
-            if (Crisis.ESCANDALO in g.settings.crises && rng(it.id).nextDouble() < (5 - it.honesty) * 0.006 && g.events.none { e -> e.key == "escandalo" })
+            if (g.settings.randomEvents && Crisis.ESCANDALO in g.settings.crises && rng(it.id).nextDouble() < (5 - it.honesty) * 0.006 && g.events.none { e -> e.key == "escandalo" })
                 g.events += PendingEvent("escandalo", g.day, area = it.area, text = it.name)
         }
         if (month.monthValue % 6 == 0) Setup.refreshPool(this)
         // promessas vencidas
         for (p in g.promises.filter { !it.kept && it.until <= g.day }) {
             g.bairros[p.bairro].approval -= 6
+            g.camara.firstOrNull { it.id == p.vereador }?.let { it.favor -= 20; it.relation -= 20 }
             news("broken", "Promessa não cumprida ${Fmt.inB(g.bairros[p.bairro].name)}", 2, p.bairro)
         }
         g.promises.removeAll { it.kept || it.until <= g.day }
+
+        Camara.monthly(this)
 
         val rec = MonthRecord(g.day, g.approval, g.cash, rev, exp, g.pop)
         g.history += rec
