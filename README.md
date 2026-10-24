@@ -12,7 +12,7 @@ A cada envio para `main`, o GitHub Actions roda os testes, gera o APK e publica 
 
 - **Mapa:** o contorno real da cidade, dividido em bairros. Toque num bairro para ver aprovação, moradores e obras.
 - **Governo:** gasto por área, IPTU e ISS, empréstimos. Fure o piso de saúde (15%), de educação (25%) ou o teto de pessoal (54%) e o Tribunal de Contas rejeita as contas; duas rejeições no mesmo cargo deixam você inelegível. O Tribunal avisa antes, e uma base de 2/3 no legislativo derruba o parecer.
-- **Obras:** 24 tipos, cada um com custo, prazo e quantas pessoas atende. Inaugurar dá aprovação no bairro.
+- **Obras:** 54 na cidade, 42 no estado e 38 no país, cada uma com custo, prazo e quantas pessoas atende. Algumas mexem em duas áreas (refinaria: economia +3, ambiente −2), outras têm manutenção cara (estádio) ou incomodam os vizinhos (aterro, socioeducativo). Inaugurar dá aprovação no bairro.
 - **Equipe:** um secretário por área — competência, honestidade e lealdade.
 - **Câmara:** vereadores com partido, reduto e relação com você. Envie leis prontas ou criadas por você, negocie (conversa, emenda, cargo, obra prometida) e cuide da maioria: oposição forte abre CPI e, com o governo impopular, vota a cassação.
 - **Menu de pausa:** liga e desliga os eventos aleatórios e muda a dificuldade das eleições (fácil, normal, difícil) a qualquer momento.

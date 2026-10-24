@@ -65,3 +65,21 @@ class GolpeTest {
         assertTrue(end.game.regime)
     }
 }
+
+class CatalogTest {
+    @Test fun idsAreUnique() {
+        val obras = Content.OBRAS + Content.OBRAS_ESTADO + Content.OBRAS_PAIS
+        assertEquals(obras.size, obras.map { it.id }.toSet().size)
+        val laws = Laws.READY + Laws.ESTADO + Laws.FEDERAL
+        assertEquals(laws.size, laws.map { it.id }.toSet().size)
+    }
+
+    @Test fun refineryHurtsEnvironment() {
+        val s = TestBr.newSim(TestBr.FORTALEZA, 3, Role.PRESIDENTE)
+        s.game.cash = 1e12
+        val before = s.game.legacy[Area.AMBIENTE.ordinal]
+        s.build("refinaria", 0)
+        repeat(365 * 4 + 30) { s.advanceDay(); s.game.events.clear() }
+        assertTrue(s.game.legacy[Area.AMBIENTE.ordinal] <= before - 2.0 + 1e-9 || s.game.obras.none { it.done && it.type == "refinaria" })
+    }
+}

@@ -212,6 +212,10 @@ fun ObrasSheet(c: GameController) {
                             Column(Modifier.weight(1f)) {
                                 Text(t.name, style = Type.body.copy(fontWeight = FontWeight.Medium), color = Ink.text)
                                 Text("${t.desc} · atende ${Fmt.people(sim.obraServes(t))}", style = Type.small, color = Ink.muted, maxLines = 2)
+                                // efeitos extras e o lado ruim
+                                val side = t.extra.map { (a, v) -> "${a.short} ${Fmt.signed(v)}" } +
+                                    listOfNotNull(if (t.nimby > 0) "vizinhos reclamam" else null, if (t.upkeep > 0.06) "manutenção cara" else null)
+                                if (side.isNotEmpty()) Text(side.joinToString(" · "), style = Type.small, color = Ink.gold, maxLines = 1)
                             }
                             Spacer(Modifier.width(8.dp))
                             Column(horizontalAlignment = Alignment.End) {
@@ -221,7 +225,7 @@ fun ObrasSheet(c: GameController) {
                         }
                     }
                 }
-                Note("Paga 15% na largada e o resto mês a mês. Pronta, a obra custa 6% do valor por ano em manutenção.")
+                Note("Paga 15% na largada e o resto mês a mês. Pronta, a obra custa em geral 6% do valor por ano em manutenção.")
             }
             1 -> {
                 val list = g.obras.filter { !it.done }

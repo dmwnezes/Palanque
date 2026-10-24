@@ -1,7 +1,16 @@
 package com.dmwnezes.palanque.sim
 
 /** Obra do catálogo: custo em R$, prazo em meses, quantas pessoas atende. */
-class ObraType(val id: String, val name: String, val area: Area, val cost: Double, val months: Int, val serves: Double, val icon: String, val desc: String, val level: Level = Level.CIDADE)
+class ObraType(
+    val id: String, val name: String, val area: Area, val cost: Double, val months: Int, val serves: Double, val icon: String, val desc: String,
+    val level: Level = Level.CIDADE,
+    /** efeito permanente em outras áreas ao inaugurar (ex.: refinaria: economia +3, ambiente −2) */
+    val extra: Map<Area, Double> = emptyMap(),
+    /** manutenção por ano, em fração do custo */
+    val upkeep: Double = 0.06,
+    /** vizinhos que não querem a obra perto: aprovação perdida na região ao inaugurar */
+    val nimby: Double = 0.0,
+)
 
 object Content {
     /** Partidos com registro no TSE (tamanho e posição aproximados, só para o jogo). */
@@ -59,6 +68,36 @@ object Content {
         ObraType("ecoponto", "Ecoponto", Area.AMBIENTE, 1e6, 3, 20000.0, "recycle", "Coleta seletiva e entulho"),
         ObraType("orla", "Polo turístico", Area.TURISMO, 12e6, 12, 60000.0, "beach", "Orla, mirante ou centro histórico"),
         ObraType("eventos", "Centro de eventos", Area.TURISMO, 18e6, 16, 80000.0, "stage", "Feiras, shows e congressos"),
+        ObraType("caps", "Centro de Atenção Psicossocial", Area.SAUDE, 4e6, 10, 30000.0, "health", "Saúde mental e dependência química", extra = mapOf(Area.SEGURANCA to 1.0)),
+        ObraType("maternidade", "Clínica da mulher e maternidade", Area.SAUDE, 12e6, 16, 60000.0, "child", "Pré-natal, parto e saúde da mulher"),
+        ObraType("farmacia", "Farmácia popular", Area.SAUDE, 1.5e6, 4, 20000.0, "health", "Remédio de graça ou barato"),
+        ObraType("zoonoses", "Centro de zoonoses", Area.SAUDE, 3e6, 8, 80000.0, "tree", "Vacina e castração de animais", extra = mapOf(Area.AMBIENTE to 1.0)),
+        ObraType("biblioteca", "Biblioteca de bairro", Area.EDUCACAO, 2e6, 6, 15000.0, "school", "Livros, internet e reforço escolar", extra = mapOf(Area.CULTURA to 1.0)),
+        ObraType("bilingue", "Escola bilíngue", Area.EDUCACAO, 9e6, 14, 6000.0, "school", "Inglês desde a alfabetização"),
+        ObraType("transp_escolar", "Transporte escolar rural", Area.EDUCACAO, 2.5e6, 3, 6000.0, "bus", "Ônibus para quem mora longe da escola", extra = mapOf(Area.TRANSPORTE to 1.0)),
+        ObraType("botao_panico", "Botão do pânico para mulheres", Area.SEGURANCA, 1e6, 3, 40000.0, "alert", "Alerta direto para a Guarda"),
+        ObraType("mediacao", "Centro de mediação de conflitos", Area.SEGURANCA, 1.2e6, 5, 30000.0, "handshake", "Briga de vizinho resolvida sem polícia"),
+        ObraType("cerco_digital", "Cerco digital com leitura de placas", Area.SEGURANCA, 6e6, 6, 80000.0, "camera", "Câmeras nas entradas da cidade"),
+        ObraType("incubadora", "Incubadora de startups", Area.ECONOMIA, 4e6, 10, 20000.0, "tech", "Escritório e mentoria para empresas novas"),
+        ObraType("feira_empreendedor", "Feira do empreendedor", Area.ECONOMIA, 1.5e6, 4, 15000.0, "store", "Crédito e vitrine para pequenos negócios"),
+        ObraType("qualificacao", "Centro de qualificação profissional", Area.ECONOMIA, 6e6, 10, 25000.0, "tech", "Cursos rápidos para arrumar emprego", extra = mapOf(Area.EDUCACAO to 1.0)),
+        ObraType("viaduto", "Viaduto", Area.TRANSPORTE, 25e6, 18, 80000.0, "road", "Fim do gargalo no cruzamento"),
+        ObraType("faixa_onibus", "Faixa exclusiva de ônibus", Area.TRANSPORTE, 4e6, 4, 60000.0, "bus", "Ônibus mais rápido que carro"),
+        ObraType("bike_share", "Bicicletas compartilhadas", Area.TRANSPORTE, 2e6, 3, 30000.0, "bike", "Estações de aluguel pela cidade", extra = mapOf(Area.AMBIENTE to 1.0)),
+        ObraType("teleferico", "Teleférico", Area.TRANSPORTE, 60e6, 24, 50000.0, "bus", "Liga o morro ao centro", extra = mapOf(Area.TURISMO to 1.0)),
+        ObraType("aterro", "Aterro sanitário", Area.SANEAMENTO, 20e6, 14, 300000.0, "recycle", "Fecha o lixão", extra = mapOf(Area.AMBIENTE to 2.0), nimby = 5.0),
+        ObraType("cisternas", "Cisternas na zona rural", Area.SANEAMENTO, 2e6, 4, 8000.0, "water", "Água da chuva guardada em casa"),
+        ObraType("encostas", "Contenção de encostas", Area.SANEAMENTO, 10e6, 10, 15000.0, "rain", "Morro seguro na época de chuva"),
+        ObraType("skatepark", "Skatepark", Area.CULTURA, 1e6, 3, 8000.0, "sport", "Pista para skate e patins"),
+        ObraType("arena", "Arena de esportes", Area.CULTURA, 25e6, 18, 120000.0, "sport", "Jogos, lutas e shows", extra = mapOf(Area.TURISMO to 1.0), upkeep = 0.1),
+        ObraType("cinema_rua", "Cinema de rua", Area.CULTURA, 4e6, 8, 30000.0, "theater", "Sessões baratas no centro"),
+        ObraType("casa_shows", "Casa de shows", Area.CULTURA, 6e6, 10, 40000.0, "stage", "Música ao vivo e festas", extra = mapOf(Area.TURISMO to 1.0), nimby = 2.0),
+        ObraType("horta", "Horta comunitária", Area.AMBIENTE, 500000.0, 3, 5000.0, "plant", "Verdura fresca cultivada pelos vizinhos", extra = mapOf(Area.SAUDE to 1.0)),
+        ObraType("arborizacao", "Arborização de ruas", Area.AMBIENTE, 2e6, 6, 30000.0, "tree", "Sombra e menos calor"),
+        ObraType("usina_solar", "Usina solar da prefeitura", Area.AMBIENTE, 8e6, 8, 100000.0, "bolt", "Energia limpa e conta de luz menor"),
+        ObraType("artesanato", "Mercado de artesanato", Area.TURISMO, 3e6, 8, 30000.0, "store", "Renda para artesãos e vitrine para turistas", extra = mapOf(Area.ECONOMIA to 1.0)),
+        ObraType("rota_gastronomica", "Rota gastronômica", Area.TURISMO, 1.5e6, 4, 40000.0, "party", "Bares e restaurantes no roteiro"),
+        ObraType("centro_historico", "Restauração do centro histórico", Area.TURISMO, 15e6, 18, 80000.0, "theater", "Casarões e praças recuperados", extra = mapOf(Area.CULTURA to 1.0)),
     )
 
     /** Obras do governo estadual: maiores, mais caras, atendem regiões inteiras. */
@@ -79,6 +118,32 @@ object Content {
         ObraType("parque_estadual", "Parque estadual", Area.AMBIENTE, 15e6, 12, 300_000.0, "tree", "Área protegida e trilhas", Level.ESTADO),
         ObraType("aeroporto", "Aeroporto regional", Area.TURISMO, 95e6, 30, 700_000.0, "stage", "Voos para o interior", Level.ESTADO),
         ObraType("convencoes", "Centro de convenções", Area.TURISMO, 60e6, 24, 1_000_000.0, "stage", "Feiras e congressos nacionais", Level.ESTADO),
+        ObraType("hemocentro", "Hemocentro", Area.SAUDE, 25e6, 14, 500_000.0, "health", "Sangue para todos os hospitais do estado", Level.ESTADO),
+        ObraType("hosp_cancer", "Hospital do câncer", Area.SAUDE, 120e6, 30, 800_000.0, "hospital", "Quimioterapia perto de casa", Level.ESTADO),
+        ObraType("reabilitacao", "Centro de reabilitação", Area.SAUDE, 30e6, 16, 300_000.0, "emergency", "Fisioterapia e próteses", Level.ESTADO),
+        ObraType("escola_militar", "Escola militar estadual", Area.EDUCACAO, 20e6, 14, 15_000.0, "school", "Disciplina e ensino médio", Level.ESTADO, extra = mapOf(Area.SEGURANCA to 1.0)),
+        ObraType("ead", "Polo de educação a distância", Area.EDUCACAO, 8e6, 6, 100_000.0, "tech", "Faculdade pela internet no interior", Level.ESTADO),
+        ObraType("ciops", "Centro integrado de comando", Area.SEGURANCA, 40e6, 14, 2_000_000.0, "camera", "Polícia, bombeiros e câmeras numa sala só", Level.ESTADO),
+        ObraType("delegacia_mulher", "Delegacia da mulher", Area.SEGURANCA, 5e6, 6, 150_000.0, "shield", "Atendimento 24 horas", Level.ESTADO),
+        ObraType("socioeducativo", "Centro socioeducativo", Area.SEGURANCA, 30e6, 18, 500_000.0, "gavel", "Internação de menores infratores", Level.ESTADO, nimby = 4.0),
+        ObraType("zpe", "Zona de processamento de exportação", Area.ECONOMIA, 80e6, 24, 800_000.0, "factory", "Indústria voltada para fora", Level.ESTADO),
+        ObraType("polo_tec", "Polo de tecnologia", Area.ECONOMIA, 40e6, 18, 400_000.0, "tech", "Empresas de software e pesquisa", Level.ESTADO, extra = mapOf(Area.EDUCACAO to 1.0)),
+        ObraType("logistica", "Centro de distribuição logística", Area.ECONOMIA, 35e6, 14, 500_000.0, "store", "Galpões e caminhões para todo o Nordeste", Level.ESTADO, extra = mapOf(Area.TRANSPORTE to 1.0)),
+        ObraType("rodoanel", "Rodoanel", Area.TRANSPORTE, 600e6, 40, 2_000_000.0, "road", "Caminhões longe da capital", Level.ESTADO),
+        ObraType("trem_inter", "Trem intermunicipal", Area.TRANSPORTE, 500e6, 40, 1_000_000.0, "bus", "Trilhos entre a capital e o interior", Level.ESTADO),
+        ObraType("hidrovia", "Balsa e hidrovia", Area.TRANSPORTE, 60e6, 18, 300_000.0, "water", "Travessia de rio sem esperar", Level.ESTADO),
+        ObraType("dessal", "Dessalinizadora", Area.SANEAMENTO, 200e6, 30, 700_000.0, "water", "Água do mar para beber", Level.ESTADO),
+        ObraType("barragem", "Barragem", Area.SANEAMENTO, 150e6, 30, 500_000.0, "water", "Reserva de água para a seca", Level.ESTADO, extra = mapOf(Area.ECONOMIA to 1.0)),
+        ObraType("usina_lixo", "Usina de lixo e energia", Area.SANEAMENTO, 90e6, 24, 1_500_000.0, "recycle", "Lixo queimado vira luz", Level.ESTADO, extra = mapOf(Area.AMBIENTE to 1.0), nimby = 3.0),
+        ObraType("estadio", "Estádio", Area.CULTURA, 400e6, 36, 2_000_000.0, "sport", "Futebol e grandes shows", Level.ESTADO, extra = mapOf(Area.TURISMO to 2.0), upkeep = 0.12),
+        ObraType("orquestra", "Orquestra estadual", Area.CULTURA, 10e6, 6, 1_000_000.0, "theater", "Concertos nas cidades do interior", Level.ESTADO),
+        ObraType("vila_olimpica", "Vila olímpica", Area.CULTURA, 30e6, 16, 300_000.0, "sport", "Esporte para crianças e atletas", Level.ESTADO, extra = mapOf(Area.SAUDE to 1.0)),
+        ObraType("viveiro", "Viveiro de mudas", Area.AMBIENTE, 5e6, 6, 500_000.0, "plant", "Reflorestamento de áreas degradadas", Level.ESTADO),
+        ObraType("nascentes", "Recuperação de nascentes", Area.AMBIENTE, 15e6, 12, 600_000.0, "water", "Rio com água o ano inteiro", Level.ESTADO, extra = mapOf(Area.SANEAMENTO to 1.0)),
+        ObraType("brigada", "Brigada contra incêndios", Area.AMBIENTE, 12e6, 8, 800_000.0, "emergency", "Fogo apagado antes de virar queimada", Level.ESTADO),
+        ObraType("estrada_parque", "Estrada-parque", Area.TURISMO, 80e6, 20, 600_000.0, "road", "Estrada bonita até o destino turístico", Level.ESTADO, extra = mapOf(Area.TRANSPORTE to 1.0)),
+        ObraType("parque_tematico", "Parque temático", Area.TURISMO, 150e6, 30, 1_500_000.0, "party", "Atração para turistas de todo o país", Level.ESTADO, extra = mapOf(Area.ECONOMIA to 1.0)),
+        ObraType("porto_cruzeiros", "Porto de cruzeiros", Area.TURISMO, 120e6, 30, 1_200_000.0, "beach", "Navios de turistas na capital", Level.ESTADO),
     )
 
     /** Obras federais: bilhões, anos de prazo, atendem milhões em um estado. */
@@ -98,6 +163,29 @@ object Content {
         ObraType("museu", "Museu nacional", Area.CULTURA, 500e6, 24, 10e6, "theater", "Acervo, teatro e biblioteca", Level.PAIS),
         ObraType("parque_nacional", "Parque nacional", Area.AMBIENTE, 300e6, 12, 10e6, "tree", "Floresta protegida e fiscalizada", Level.PAIS),
         ObraType("aeroporto_int", "Aeroporto internacional", Area.TURISMO, 4e9, 36, 20e6, "stage", "Voos diretos do exterior", Level.PAIS),
+        ObraType("vacinas", "Fábrica de vacinas", Area.SAUDE, 3e9, 36, 15e6, "virus", "Vacina feita no Brasil", Level.PAIS, extra = mapOf(Area.ECONOMIA to 1.0)),
+        ObraType("uti_aerea", "UTIs aéreas na Amazônia", Area.SAUDE, 800e6, 12, 5e6, "emergency", "Avião-hospital para quem mora longe", Level.PAIS),
+        ObraType("hosp_escola", "Hospital-escola", Area.EDUCACAO, 1.2e9, 30, 4e6, "hospital", "Forma médicos e atende a população", Level.PAIS, extra = mapOf(Area.SAUDE to 1.0)),
+        ObraType("pesquisa", "Centro de pesquisa espacial e de energia", Area.EDUCACAO, 5e9, 48, 10e6, "tech", "Ciência de ponta e patentes", Level.PAIS, extra = mapOf(Area.ECONOMIA to 2.0)),
+        ObraType("fronteira", "Base de fronteira contra o tráfico", Area.SEGURANCA, 1.5e9, 18, 15e6, "shield", "Exército e PF nas fronteiras", Level.PAIS),
+        ObraType("prf", "Polícia Rodoviária ampliada", Area.SEGURANCA, 700e6, 12, 10e6, "siren", "Mais postos nas BRs", Level.PAIS, extra = mapOf(Area.TRANSPORTE to 1.0)),
+        ObraType("refinaria", "Refinaria", Area.ECONOMIA, 20e9, 48, 20e6, "factory", "Combustível refinado aqui", Level.PAIS, extra = mapOf(Area.ECONOMIA to 3.0, Area.AMBIENTE to -2.0)),
+        ObraType("polo_naval", "Polo naval", Area.ECONOMIA, 8e9, 36, 12e6, "factory", "Navios e plataformas de petróleo", Level.PAIS),
+        ObraType("zona_franca", "Zona Franca nova", Area.ECONOMIA, 3e9, 24, 8e6, "store", "Imposto menor para atrair indústria", Level.PAIS),
+        ObraType("trem_rapido", "Trem de alta velocidade", Area.TRANSPORTE, 60e9, 72, 30e6, "bus", "Rio–São Paulo em 90 minutos", Level.PAIS, extra = mapOf(Area.TURISMO to 1.0)),
+        ObraType("ponte", "Ponte entre estados", Area.TRANSPORTE, 4e9, 36, 8e6, "road", "Fim da balsa no rio", Level.PAIS),
+        ObraType("aero_regionais", "Aeroportos regionais", Area.TRANSPORTE, 3e9, 30, 12e6, "stage", "Voos para cidades médias", Level.PAIS, extra = mapOf(Area.TURISMO to 1.0)),
+        ObraType("cisternas_nac", "Programa nacional de cisternas", Area.SANEAMENTO, 2e9, 18, 10e6, "water", "Um milhão de cisternas no Semiárido", Level.PAIS),
+        ObraType("despoluicao", "Despoluição de rio", Area.SANEAMENTO, 10e9, 48, 15e6, "plant", "Rio limpo de novo", Level.PAIS, extra = mapOf(Area.AMBIENTE to 2.0)),
+        ObraType("alto_rendimento", "Centro de alto rendimento esportivo", Area.CULTURA, 1e9, 24, 10e6, "sport", "Atletas olímpicos treinando aqui", Level.PAIS),
+        ObraType("cinemateca", "Cinemateca nacional", Area.CULTURA, 400e6, 18, 15e6, "theater", "Acervo e fomento ao cinema", Level.PAIS),
+        ObraType("megaevento", "Sede de Copa ou Olimpíada", Area.CULTURA, 40e9, 60, 40e6, "trophy", "Os olhos do mundo no Brasil", Level.PAIS, extra = mapOf(Area.TURISMO to 5.0, Area.TRANSPORTE to 1.0), upkeep = 0.12),
+        ObraType("satelite", "Satélite contra o desmatamento", Area.AMBIENTE, 1.5e9, 24, 20e6, "camera", "Alerta de desmatamento em tempo real", Level.PAIS),
+        ObraType("corredor", "Corredor ecológico", Area.AMBIENTE, 800e6, 24, 12e6, "tree", "Floresta ligada de um parque ao outro", Level.PAIS),
+        ObraType("fundo_amazonia", "Fundo Amazônia", Area.AMBIENTE, 2e9, 12, 15e6, "tree", "Dinheiro para quem preserva", Level.PAIS, extra = mapOf(Area.ECONOMIA to 1.0)),
+        ObraType("rota_nacional", "Rota turística nacional", Area.TURISMO, 1.5e9, 18, 15e6, "beach", "Roteiro integrado pelos estados", Level.PAIS),
+        ObraType("visite", "Campanha Visite o Brasil", Area.TURISMO, 600e6, 6, 20e6, "party", "Propaganda do país no exterior", Level.PAIS),
+        ObraType("unesco", "Restauração de patrimônio da UNESCO", Area.TURISMO, 1e9, 24, 10e6, "theater", "Cidades históricas recuperadas", Level.PAIS, extra = mapOf(Area.CULTURA to 1.0)),
     )
 
     fun obrasFor(level: Level) = when (level) { Level.CIDADE -> OBRAS; Level.ESTADO -> OBRAS_ESTADO; Level.PAIS -> OBRAS_PAIS }

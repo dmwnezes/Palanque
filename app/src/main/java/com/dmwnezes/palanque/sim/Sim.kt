@@ -173,7 +173,7 @@ class Sim(val br: Brasil, val game: Game) {
         val areas = DoubleArray(Area.entries.size) { i -> Area.entries[i].ref(level) * g.spend[i] * pop * g.costScale * g.wage[i] * prices }
         val interest = g.debt * 0.009 * 12
         val amort = g.debt / 10
-        val upkeep = g.obras.filter { it.done }.sumOf { Content.obra(it.type).cost * obraUnits * 0.06 * it.share }
+        val upkeep = g.obras.filter { it.done }.sumOf { Content.obra(it.type).let { t -> t.cost * obraUnits * t.upkeep * it.share } }
         val works = g.obras.filter { !it.done }.sumOf { val t = Content.obra(it.type); t.cost * obraUnits * it.share / t.months * 12 }
         // leis federais só custam para a União
         val laws = pop * active.filter { level == Level.PAIS || !Laws.isFederal(it.id) }.sumOf { it.costPc } * g.costScale * prices
@@ -381,7 +381,9 @@ class Sim(val br: Brasil, val game: Game) {
         o.done = true; o.progress = 1.0
         val t = Content.obra(o.type)
         val b = game.bairros[o.bairro]
-        b.bump += 6.0
+        b.bump += 6.0 - t.nimby
+        for ((a, v) in t.extra) game.legacy[a.ordinal] += v
+        if (t.nimby > 0) b.approval = (b.approval - t.nimby).coerceAtLeast(1.0)
         game.promises.filter { !it.kept && it.bairro == o.bairro && it.area == t.area }.forEach { it.kept = true; b.bump += 4.0 }
         if (governs) news("ribbon", "Inaugurado: ${t.name} ${Fmt.inB(b.name)}", 1, o.bairro)
         else news("ribbon", "O ${execTitle} inaugura: ${t.name} ${Fmt.inB(b.name)}", 0, o.bairro)
