@@ -100,11 +100,11 @@ object Setup {
         val sim = Sim(br, g)
         // alíquota padrão do imposto B (ISS, ICMS modal ou contribuições federais)
         g.iss = sim.taxBDefault
-        // escala de custo: o governo começa gastando 97% do que arrecada, já contando a dívida herdada
+        // escala de custo: o governo começa gastando 90% do que arrecada, já contando a dívida herdada
         val b0 = sim.budget()
         g.debt = b0.revenue * (if (level == Level.CIDADE) 0.08 else 0.4)
         val service = g.debt * (Sim.INTEREST_MONTH * 12 + 1 / Sim.DEBT_YEARS)
-        g.costScale = ((0.97 * b0.revenue - b0.camara - service) / (pop * (Area.refTotal(level) + sim.adminPc))).coerceIn(0.4, 3.0)
+        g.costScale = ((0.90 * b0.revenue - b0.camara - service) / (pop * (Area.refTotal(level) + sim.adminPc))).coerceIn(0.4, 3.0)
         g.cash = sim.budget().revenue * 0.05
         if (level != Level.CIDADE) Mayors.init(sim)
         val execApproval = g.bairros.indices.sumOf { sim.approvalParts(it).total * g.bairros[it].popShare }

@@ -12,8 +12,8 @@ val START_DATE: LocalDate = LocalDate.of(2029, 1, 1)
  * `refPais` = União (SUS federal, universidades, programas sociais em economia).
  */
 enum class Area(val label: String, val short: String, val ref: Double, val weight: Double, val refState: Double, val refPais: Double) {
-    SAUDE("Saúde", "Saúde", 950.0, 0.20, 650.0, 1100.0),
-    EDUCACAO("Educação", "Educação", 1050.0, 0.17, 900.0, 1300.0),
+    SAUDE("Saúde", "Saúde", 950.0, 0.20, 700.0, 1450.0),
+    EDUCACAO("Educação", "Educação", 1050.0, 0.17, 1050.0, 1650.0),
     SEGURANCA("Segurança", "Segurança", 70.0, 0.16, 450.0, 100.0),
     ECONOMIA("Economia e emprego", "Economia", 60.0, 0.16, 60.0, 900.0),
     TRANSPORTE("Transporte", "Transporte", 180.0, 0.08, 150.0, 200.0),

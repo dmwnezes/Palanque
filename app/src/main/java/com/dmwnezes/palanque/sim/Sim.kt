@@ -117,7 +117,8 @@ class Sim(val br: Brasil, val game: Game) {
     val obraUnits: Int get() = max(1, (game.pop / when (level) { Level.CIDADE -> 300_000.0; Level.ESTADO -> 3_000_000.0; Level.PAIS -> 100e6 }).roundToInt())
     val obras: List<ObraType> get() = Content.obrasFor(level)
 
-    fun obraCost(t: ObraType) = t.cost * obraUnits
+    /** preço de jogo: 65% do valor de catálogo, para sobrar espaço para construir */
+    fun obraCost(t: ObraType) = t.cost * obraUnits * 0.65
     fun obraServes(t: ObraType) = t.serves * obraUnits
     val maxObras get() = when (level) {
         Level.CIDADE -> min(12, 3 + (game.pop / 60_000).toInt())
@@ -175,12 +176,16 @@ class Sim(val br: Brasil, val game: Game) {
         val pc = pib / pop
         val active = g.laws.map { Laws.def(g, it) }
         val propMul = active.fold(1.0) { a, l -> a * l.iptuMul }
-        val prices = if (g.pibPc0 > 0) (pc / g.pibPc0).pow(0.7) else 1.0
+        // custos sobem mais devagar que a economia: crescer dá folga no orçamento
+        val prices = if (g.pibPc0 > 0) (pc / g.pibPc0).pow(0.5) else 1.0
+        // repasses federais (FPM, FPE, SUS, Fundeb) acompanham o país, que cresce 2,5% ao ano
+        val nat = 1.025.pow(g.day / 365.0)
         val areas = DoubleArray(Area.entries.size) { i -> Area.entries[i].ref(level) * g.spend[i] * pop * g.costScale * g.wage[i] * prices }
         val interest = g.debt * INTEREST_MONTH * 12
         val amort = g.debt / DEBT_YEARS
-        val upkeep = g.obras.filter { it.done }.sumOf { Content.obra(it.type).let { t -> t.cost * obraUnits * t.upkeep * it.share } }
-        val works = g.obras.filter { !it.done }.sumOf { val t = Content.obra(it.type); t.cost * obraUnits * it.share / t.months * 12 }
+        val upkeep = g.obras.filter { it.done }.sumOf { Content.obra(it.type).let { t -> obraCost(t) * t.upkeep * it.share } }
+        // 15% já foram pagos na largada; o resto sai mês a mês
+        val works = g.obras.filter { !it.done }.sumOf { val t = Content.obra(it.type); obraCost(t) * 0.85 * it.share / t.months * 12 }
         // leis federais só custam para a União
         val laws = pop * active.filter { level == Level.PAIS || !Laws.isFederal(it.id) }.sumOf { it.costPc } * g.costScale * prices
         val cargos = g.cargos * max(90_000.0, pop * (if (level == Level.CIDADE) 0.6 else 0.06)) * prices
@@ -189,11 +194,11 @@ class Sim(val br: Brasil, val game: Game) {
             val compliance = 0.92 - (g.iss - 2.0) * 0.035
             val iss = pib * 0.45 * g.iss / 100 * compliance * econ
             val itbi = pib * 0.0018 * econ
-            val fpm = 247_000.0 * pop.pow(0.477)
+            val fpm = 247_000.0 * pop.pow(0.477) * nat
             val icms = (pib * 0.017 + pop * 120) * econ
             val admin = pop * 260 * g.costScale * prices
             val camara = 0.06 * (iptu + iss + itbi + fpm + icms)
-            return Budget(iptu, iss, itbi, fpm, icms, pop * 400, pop * 650, areas, admin, camara, interest, amort, upkeep, works, laws, cargos)
+            return Budget(iptu, iss, itbi, fpm, icms, pop * 400 * nat, pop * 650 * nat, areas, admin, camara, interest, amort, upkeep, works, laws, cargos)
         }
         if (level == Level.PAIS) {
             // União: IR e contribuições; metade do IR e do IPI vai para estados e municípios (FPE, FPM, Fundeb)
@@ -215,11 +220,11 @@ class Sim(val br: Brasil, val game: Game) {
         val icms = pib * 0.075 * (g.iss / 18.0) * compliance * econ * 0.75
         val itcmd = pib * 0.0008 * econ
         // o FPE favorece Norte e Nordeste
-        val fpe = pop * (if (g.uf in 11..29) 1350.0 else 280.0)
+        val fpe = pop * (if (g.uf in 11..29) 1350.0 else 280.0) * nat
         val other = pib * 0.004
         val admin = pop * 220 * g.costScale * prices
         val poderes = 0.12 * (ipva + icms + itcmd + fpe)
-        return Budget(ipva, icms, itcmd, fpe, other, pop * 250, pop * 420, areas, admin, poderes, interest, amort, upkeep, works, laws, cargos)
+        return Budget(ipva, icms, itcmd, fpe, other, pop * 250 * nat, pop * 420 * nat, areas, admin, poderes, interest, amort, upkeep, works, laws, cargos)
     }
 
     /** Pisos e teto do nível: município (15%, 25%, 54%), estado (12%, 25%, 49%) ou União (15%, 18%, 50%). */
@@ -402,7 +407,7 @@ class Sim(val br: Brasil, val game: Game) {
         val exp = b.expense / 12
         g.cash += rev - exp
         g.debt = max(0.0, g.debt - b.amort / 12)
-        for (o in g.obras) if (!o.done) o.paid += Content.obra(o.type).cost * obraUnits * o.share / Content.obra(o.type).months
+        for (o in g.obras) if (!o.done) o.paid += obraCost(Content.obra(o.type)) * 0.85 * o.share / Content.obra(o.type).months
 
         g.year.revenue += rev; g.year.taxBase += b.taxBase / 12
         g.year.health += b.healthPiso / 12
@@ -422,7 +427,7 @@ class Sim(val br: Brasil, val game: Game) {
         for (i in g.wage.indices) g.wage[i] = max(1.0, g.wage[i] * (1 - 0.035 / 12))
         val econ = g.ind[Area.ECONOMIA.ordinal]
         g.pop *= 1 + (0.006 + (g.execApproval - 50) * 0.00004 + (econ - 50) * 0.00008) / 12
-        g.pib *= 1 + (0.012 + (econ - 50) * 0.0007 + (g.ind[Area.SEGURANCA.ordinal] - 50) * 0.0002 + mod("pib")) / 12
+        g.pib *= 1 + (0.025 + (econ - 50) * 0.0007 + (g.ind[Area.SEGURANCA.ordinal] - 50) * 0.0002 + mod("pib")) / 12
 
         if (governs) {
             tceAlert()

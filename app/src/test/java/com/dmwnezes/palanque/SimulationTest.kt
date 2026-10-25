@@ -102,7 +102,8 @@ class SimulationTest {
         val s = TestBr.newSim()
         val b = s.budget()
         assertTrue("receita ${b.revenue}", b.revenue > 1e8 && b.revenue < 1e9)
-        assertTrue("equilíbrio ${b.balance / b.revenue}", kotlin.math.abs(b.balance / b.revenue) < 0.08)
+        // começa com uns 10% de sobra para investir
+        assertTrue("equilíbrio ${b.balance / b.revenue}", b.balance / b.revenue in 0.05..0.15)
         val l = s.limits()
         assertTrue(l.healthOk && l.educationOk && l.personnelOk)
         assertTrue("aprovação ${s.game.approval}", s.game.approval in 30.0..75.0)
