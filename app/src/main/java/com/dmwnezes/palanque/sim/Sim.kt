@@ -50,6 +50,12 @@ class Budget(
  * e a aprovação dos bairros/municípios passa a ser o seu apoio eleitoral.
  */
 class Sim(val br: Brasil, val game: Game) {
+    companion object {
+        /** juros de 0,8% ao mês e dívida paga em 15 anos */
+        const val INTEREST_MONTH = 0.008
+        const val DEBT_YEARS = 15.0
+    }
+
     val level: Level get() = game.level
     /** cidade natal (nas cidades, a própria jurisdição) */
     val city: Region = br.city(game.cityCode) ?: error("cidade ${game.cityCode} não existe")
@@ -171,8 +177,8 @@ class Sim(val br: Brasil, val game: Game) {
         val propMul = active.fold(1.0) { a, l -> a * l.iptuMul }
         val prices = if (g.pibPc0 > 0) (pc / g.pibPc0).pow(0.7) else 1.0
         val areas = DoubleArray(Area.entries.size) { i -> Area.entries[i].ref(level) * g.spend[i] * pop * g.costScale * g.wage[i] * prices }
-        val interest = g.debt * 0.009 * 12
-        val amort = g.debt / 10
+        val interest = g.debt * INTEREST_MONTH * 12
+        val amort = g.debt / DEBT_YEARS
         val upkeep = g.obras.filter { it.done }.sumOf { Content.obra(it.type).let { t -> t.cost * obraUnits * t.upkeep * it.share } }
         val works = g.obras.filter { !it.done }.sumOf { val t = Content.obra(it.type); t.cost * obraUnits * it.share / t.months * 12 }
         // leis federais só custam para a União
@@ -412,6 +418,8 @@ class Sim(val br: Brasil, val game: Game) {
         }
 
         // a jurisdição cresce mais quando vai bem
+        // a inflação come os reajustes aos poucos: em uns dois anos o salário real volta ao normal
+        for (i in g.wage.indices) g.wage[i] = max(1.0, g.wage[i] * (1 - 0.035 / 12))
         val econ = g.ind[Area.ECONOMIA.ordinal]
         g.pop *= 1 + (0.006 + (g.execApproval - 50) * 0.00004 + (econ - 50) * 0.00008) / 12
         g.pib *= 1 + (0.012 + (econ - 50) * 0.0007 + (g.ind[Area.SEGURANCA.ordinal] - 50) * 0.0002 + mod("pib")) / 12

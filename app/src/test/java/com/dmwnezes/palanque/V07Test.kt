@@ -83,3 +83,22 @@ class CatalogTest {
         assertTrue(s.game.legacy[Area.AMBIENTE.ordinal] <= before - 2.0 + 1e-9 || s.game.obras.none { it.done && it.type == "refinaria" })
     }
 }
+
+class EconomyTest {
+    /** Todo governo começa no azul e, sem mexer em nada, não quebra em quatro anos. */
+    @Test fun startsBalancedAndStaysSolvent() {
+        for (role in listOf(Role.PREFEITO, Role.GOVERNADOR, Role.PRESIDENTE)) {
+            val s = TestBr.newSim(TestBr.FORTALEZA, 3, role)
+            assertTrue("$role começa no vermelho", s.budget().balance > 0)
+            repeat(365 * 4) { s.advanceDay(); s.game.events.clear() }
+            assertTrue("$role quebrou", s.game.cash > 0)
+        }
+    }
+
+    @Test fun strikeRaisesFadeWithInflation() {
+        val s = TestBr.newSim(TestBr.HORIZONTE, 3, Role.PREFEITO)
+        s.game.wage[Area.EDUCACAO.ordinal] = 1.08
+        repeat(365 * 3) { s.advanceDay(); s.game.events.clear() }
+        assertEquals(1.0, s.game.wage[Area.EDUCACAO.ordinal], 1e-9)
+    }
+}

@@ -152,7 +152,7 @@ fun GovernoSheet(c: GameController) {
                 Spacer(Modifier.height(10.dp))
                 LineItem("Limite total (${(sim.debtLimitShare * 100).roundToInt()}% da receita)", Fmt.money(sim.debtLimit))
                 LineItem("Pode pegar neste ano", Fmt.money(sim.borrowLimit), Ink.gold)
-                Note("Juros de 0,9% ao mês. A dívida é paga em 10 anos.")
+                Note("Juros de ${"%.1f".format(com.dmwnezes.palanque.sim.Sim.INTEREST_MONTH * 100).replace('.', ',')}% ao mês. A dívida é paga em ${com.dmwnezes.palanque.sim.Sim.DEBT_YEARS.toInt()} anos.")
                 Spacer(Modifier.height(10.dp))
                 val opts = listOf(0.02, 0.05, 0.10).map { b.revenue * it }.filter { it <= sim.borrowLimit + 1 }
                 if (opts.isEmpty()) Note("Sem crédito disponível agora.", Ink.coral)
