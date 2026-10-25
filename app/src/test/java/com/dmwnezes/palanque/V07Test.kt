@@ -102,3 +102,19 @@ class EconomyTest {
         assertEquals(1.0, s.game.wage[Area.EDUCACAO.ordinal], 1e-9)
     }
 }
+
+class ClockTest {
+    /** Evento pausa o tempo; resolvido, o tempo volta a correr sozinho. */
+    @Test fun resumesAfterEvent() {
+        val s = TestBr.newSim()
+        val store = com.dmwnezes.palanque.data.SaveStore(java.nio.file.Files.createTempDirectory("s").toFile())
+        val c = com.dmwnezes.palanque.ui.GameController(s, store, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined))
+        c.paused = false
+        s.game.events += PendingEvent("festival", s.game.day)
+        c.onFrame(0.1, 1000)
+        assertTrue(c.paused)
+        Events.resolve(s, 1)
+        c.onFrame(0.1, 1100)
+        assertTrue(!c.paused)
+    }
+}

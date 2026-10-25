@@ -89,11 +89,16 @@ class GameController(val sim: Sim, private val store: SaveStore, private val sco
     /** bairro/município escolhido antes de abrir as emendas ("Emenda aqui") */
     var emendaTarget by mutableIntStateOf(-1)
 
+    /** pausado pelo jogo (evento, eleição) e não por você: volta a correr quando a decisão sai */
+    var autoPaused = false
+
     fun onFrame(dtSec: Double, nowMs: Long) {
         if (toasts.isNotEmpty()) toasts.removeAll { nowMs - it.born > 3800 }
+        if (autoPaused && !blocked) { autoPaused = false; paused = false; tick++ }
         val ev = game.events.isNotEmpty() || electionPending || campaignPending
         if (ev && !hadEvent) feedback?.play(if (electionPending) Sfx.VOTE else Sfx.EVENT)
         hadEvent = ev
+        if (blocked && !paused) { autoPaused = true; paused = true; tick++ }
         if (paused || blocked || saving) { acc = 0.0; return }
         acc += dtSec.coerceAtMost(0.25)
         val len = dayLength[(speed - 1).coerceIn(0, 3)]
@@ -108,10 +113,10 @@ class GameController(val sim: Sim, private val store: SaveStore, private val sco
         }
         if (acc > len * 3) acc = len * 3
         if (days > 0 && nowMs - lastTickMs >= 100) { tick++; lastTickMs = nowMs }
-        if (blocked) { paused = true; tick++ }
+        if (blocked) { if (!paused) autoPaused = true; paused = true; tick++ }
     }
 
-    fun togglePause() { paused = !paused; tick++ }
+    fun togglePause() { paused = !paused; autoPaused = false; tick++ }
     fun setSpeedLevel(v: Int) { speed = v.coerceIn(1, 4); paused = false; tick++ }
 
     fun say(text: String, tone: Int = 0, icon: String = "alert", bairro: Int = -1) {

@@ -176,7 +176,7 @@ object Mayors {
             s.news("flag", if (s.level == Level.PAIS) "Tomam posse os novos governadores" else "Tomam posse os novos prefeitos ${Fmt.ofState(s.state.code, s.state.name)}", 0)
         }
         // prefeito pede verba ao governador
-        if (s.governs && g.settings.randomEvents && g.events.isEmpty() && s.rng(1212).nextDouble() < 0.12) {
+        if (s.governs && g.settings.randomEvents && g.events.isEmpty() && s.rng(1212).nextDouble() < 0.05) {
             val i = g.bairros.indices.maxBy { g.bairros[it].popShare * s.rng(it).nextDouble() }
             g.events += PendingEvent("prefeito_pede", g.day, bairro = i, amount = (g.pop * g.bairros[i].popShare * 25).coerceIn(500_000.0, if (s.level == Level.PAIS) 3e9 else 60e6))
         }

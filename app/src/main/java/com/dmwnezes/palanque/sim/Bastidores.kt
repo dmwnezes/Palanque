@@ -25,7 +25,7 @@ object Midia {
         // marketing do governo sai do caixa; o de quem não governa é feito pela equipe (rende metade)
         if (g.marketing && s.governs) g.cash -= marketingCost(s)
         val active = g.inOffice || g.running != null
-        if (active && g.settings.randomEvents && g.events.isEmpty() && s.rng(3131).nextDouble() < 0.05)
+        if (active && g.settings.randomEvents && g.events.isEmpty() && s.rng(3131).nextDouble() < 0.025)
             g.events += PendingEvent("boato", g.day, text = RUMORS.random(s.rng(3132)))
     }
 

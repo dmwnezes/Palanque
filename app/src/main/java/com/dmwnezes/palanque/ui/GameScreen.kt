@@ -80,7 +80,7 @@ fun GameScreen(c: GameController, store: SaveStore, onExit: () -> Unit, onLoad: 
             c.placing != null -> { c.placing = null; c.refresh() }
             c.tab != null -> c.openTab(null)
             c.selBairro >= 0 -> c.select(-1)
-            else -> { c.paused = true; c.showSettings = true }
+            else -> { c.paused = true; c.autoPaused = false; c.showSettings = true }
         }
     }
 
@@ -220,7 +220,7 @@ private fun TopBar(c: GameController) {
             }
             SpeedControl(c)
             Spacer(Modifier.width(8.dp))
-            IconBtn(Icons.Rounded.Menu, size = 38.dp, bg = Ink.panel) { c.paused = true; c.showSettings = true }
+            IconBtn(Icons.Rounded.Menu, size = 38.dp, bg = Ink.panel) { c.paused = true; c.autoPaused = false; c.showSettings = true }
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

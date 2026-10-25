@@ -57,7 +57,7 @@ object Elections {
             e.polls += poll(s, e)
             if (!e.proportional) {
                 momentum(s, e)
-                if (g.settings.randomEvents && g.events.isEmpty() && s.rng(616).nextDouble() < 0.2) attack(s, e)
+                if (g.settings.randomEvents && g.events.isEmpty() && s.rng(616).nextDouble() < 0.12) attack(s, e)
             }
         }
         if (!e.proportional) {

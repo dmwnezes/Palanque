@@ -384,7 +384,8 @@ class Sim(val br: Brasil, val game: Game) {
         val canSpawn = g.inOffice && g.election?.let { !it.finished } != true
         if (g.settings.randomEvents && canSpawn && g.events.isEmpty() && !g.candidacyPending && g.day >= g.nextEventDay) {
             Events.spawn(this)
-            g.nextEventDay = g.day + 24 + rng(5).nextInt(30)
+            // um evento a cada dois a três meses
+            g.nextEventDay = g.day + 55 + rng(5).nextInt(40)
         }
     }
 
